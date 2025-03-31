@@ -1,5 +1,6 @@
 /logs
 *.log
+/memory
 memory/memory.db
 memory/output/display.txt
 memory/output/speech.txt

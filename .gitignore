@@ -1,0 +1,6 @@
+/logs
+*.log
+memory/memory.db
+memory/output/display.txt
+memory/output/speech.txt
+memory/output/display.txt

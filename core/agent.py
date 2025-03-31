@@ -78,6 +78,7 @@ class EmbodiedAgent:
 
         self.logger.info("Agent initialized successfully")
 
+
     def start(self):
         """Start all agent modules and processing threads."""
         if self.is_running:
@@ -85,6 +86,14 @@ class EmbodiedAgent:
             return
 
         self.logger.info("Starting agent")
+
+        # Apply memory decay (clean up old, low-importance memories)
+        try:
+            decayed_count = self.memory.decay_memories(threshold_days=30)
+            if decayed_count > 0:
+                self.logger.info(f"Decayed {decayed_count} old memories")
+        except Exception as e:
+            self.logger.error(f"Error decaying memories: {e}")
 
         # Start hardware systems
         self.sensors.start()
@@ -126,10 +135,12 @@ class EmbodiedAgent:
         self.logger.info("Agent stopped")
 
 
+
     def _start_perception_processing(self):
         """Start the perception processing thread."""
         def perception_loop():
             self.logger.debug("Starting perception loop")
+            perception_count = 0
             while self.is_running:
                 try:
                     # Get sensor data
@@ -137,9 +148,33 @@ class EmbodiedAgent:
 
                     # Log the sensor data for debugging
                     if sensor_data:
-                        self.logger.debug(f"Processing sensor data from {len(sensor_data)} sensors")
+                        perception_count += 1
+                        self.logger.debug(f"Processing sensor data from {len(sensor_data)} sensors (#{perception_count})")
                         for sensor_name, data in sensor_data.items():
-                            self.logger.debug(f"Sensor {sensor_name} ({data.get('type', 'unknown')}): {str(data)[:100]}...")
+                            sensor_type = data.get('type', 'unknown')
+                            self.logger.debug(f"Sensor {sensor_name} ({sensor_type}): {str(data)[:100]}...")
+
+                            # Store basic information in working memory for immediate access
+                            if sensor_type == 'camera' and 'description' in data:
+                                self.memory.add_to_working_memory(
+                                    item={
+                                        'type': 'perception',
+                                        'sensor': sensor_name,
+                                        'content': f"Visual: {data['description']}",
+                                        'timestamp': data.get('timestamp', time.time())
+                                    },
+                                    importance=0.6
+                                )
+                            elif sensor_type == 'microphone' and 'text' in data:
+                                self.memory.add_to_working_memory(
+                                    item={
+                                        'type': 'perception',
+                                        'sensor': sensor_name,
+                                        'content': f"Audio: {data['text']}",
+                                        'timestamp': data.get('timestamp', time.time())
+                                    },
+                                    importance=0.7
+                                )
 
                     # Process perception
                     if sensor_data:

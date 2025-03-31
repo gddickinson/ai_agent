@@ -23,14 +23,8 @@ class MemoryManager:
     Manages various memory systems for the agent.
     """
 
-    # Update in memory.py
     def __init__(self, config):
-        """
-        Initialize the memory manager.
-
-        Args:
-            config: Configuration dictionary
-        """
+        """Initialize the memory manager."""
         self.logger = logging.getLogger(__name__)
         self.config = config
         self.memory_dir = config.get('memory_dir', 'memory')
@@ -40,16 +34,13 @@ class MemoryManager:
         os.makedirs(os.path.join(self.memory_dir, 'episodic'), exist_ok=True)
         os.makedirs(os.path.join(self.memory_dir, 'semantic'), exist_ok=True)
 
-        # Initialize database
-        db_path = os.path.join(self.memory_dir, 'memory.db')
-        self.conn = None  # Initialize conn attribute
+        # Database connection is thread-local
+        self.db_path = os.path.join(self.memory_dir, 'memory.db')
+        self._local = threading.local()
+        self._local.conn = None
 
-        try:
-            self.conn = sqlite3.connect(db_path)
-            self._init_db_tables()
-            self.logger.info("Memory database initialized")
-        except Exception as e:
-            self.logger.error(f"Error initializing memory database: {e}")
+        # Initialize database
+        self._get_connection()
 
         # Set capacity limits
         self.perception_capacity = config.get('perception_capacity', 100)
@@ -63,6 +54,7 @@ class MemoryManager:
 
         self.logger.info(f"Memory manager initialized with storage at {self.memory_dir}")
 
+
     def start(self):
         """Start the memory manager."""
         if self.running:
@@ -70,16 +62,6 @@ class MemoryManager:
             return
 
         self.running = True
-
-        # Reconnect to the database if needed
-        if not self.conn:
-            try:
-                db_path = os.path.join(self.memory_dir, 'memory.db')
-                self.conn = sqlite3.connect(db_path)
-                self._init_db_tables()
-            except Exception as e:
-                self.logger.error(f"Error reconnecting to memory database: {e}")
-
         self.logger.info("Memory manager started")
 
     def stop(self):
@@ -89,11 +71,11 @@ class MemoryManager:
 
         self.running = False
 
-        # Close database connection
-        if self.conn:
+        # Close all database connections
+        if hasattr(self._local, 'conn') and self._local.conn:
             try:
-                self.conn.close()
-                self.conn = None
+                self._local.conn.close()
+                self._local.conn = None
             except Exception as e:
                 self.logger.error(f"Error closing memory database connection: {e}")
 
@@ -254,21 +236,14 @@ class MemoryManager:
 
 
     def get_recent_perceptions(self, limit=5):
-        """
-        Get the most recent perceptions from memory.
-
-        Args:
-            limit: Maximum number of perceptions to return
-
-        Returns:
-            List of perception dictionaries
-        """
+        """Get the most recent perceptions from memory."""
         try:
-            if not self.conn:
-                self.logger.warning("No database connection for getting perceptions")
+            conn = self._get_connection()
+            if not conn:
+                self.logger.error("No database connection available")
                 return []
 
-            cursor = self.conn.cursor()
+            cursor = conn.cursor()
 
             # Query for recent perceptions
             cursor.execute("""
@@ -332,20 +307,14 @@ class MemoryManager:
 
 
     def store_episodic_memory(self, memory_data):
-        """
-        Store an episodic memory.
-
-        Args:
-            memory_data: Dictionary with memory data
-        """
+        """Store an episodic memory."""
         try:
-            if not self.conn:
-                # Try to reconnect
-                db_path = os.path.join(self.memory_dir, 'memory.db')
-                self.conn = sqlite3.connect(db_path)
-                self._init_db_tables()
+            conn = self._get_connection()
+            if not conn:
+                self.logger.error("No database connection available")
+                return
 
-            cursor = self.conn.cursor()
+            cursor = conn.cursor()
 
             # Extract fields
             timestamp = memory_data.get('timestamp', time.time())
@@ -365,7 +334,7 @@ class MemoryManager:
                 VALUES (?, ?, ?, ?)
             """, (timestamp, episode_type, content, importance))
 
-            self.conn.commit()
+            conn.commit()
             self.logger.debug(f"Stored episodic memory of type {episode_type}")
 
         except Exception as e:
@@ -401,25 +370,14 @@ class MemoryManager:
 
     # Update in memory.py
     def retrieve_episodic_memories(self, query=None, min_importance=0.0, limit=10):
-        """
-        Retrieve episodic memories based on criteria.
-
-        Args:
-            query: Optional text query to search in content
-            min_importance: Minimum importance threshold
-            limit: Maximum number of memories to return
-
-        Returns:
-            List of memory dictionaries
-        """
+        """Retrieve episodic memories based on criteria."""
         try:
-            if not self.conn:
-                # Try to reconnect
-                db_path = os.path.join(self.memory_dir, 'memory.db')
-                self.conn = sqlite3.connect(db_path)
-                self._init_db_tables()
+            conn = self._get_connection()
+            if not conn:
+                self.logger.error("No database connection available")
+                return []
 
-            cursor = self.conn.cursor()
+            cursor = conn.cursor()
 
             # Build query
             sql = """
@@ -647,11 +605,21 @@ class MemoryManager:
         """Schedule a memory consolidation operation."""
         self.memory_queue.put({'type': 'consolidate'})
 
-    # Add or update in memory.py
-    def _init_db_tables(self):
+    def _get_connection(self):
+        """Get a thread-local database connection."""
+        if not hasattr(self._local, 'conn') or self._local.conn is None:
+            try:
+                self._local.conn = sqlite3.connect(self.db_path)
+                self._init_db_tables(self._local.conn)
+            except Exception as e:
+                self.logger.error(f"Error connecting to database: {e}")
+                return None
+        return self._local.conn
+
+    def _init_db_tables(self, conn):
         """Initialize database tables if they don't exist."""
         try:
-            cursor = self.conn.cursor()
+            cursor = conn.cursor()
 
             # Create perceptions table
             cursor.execute("""
@@ -688,8 +656,798 @@ class MemoryManager:
                 )
             """)
 
-            self.conn.commit()
+            conn.commit()
             self.logger.debug("Database tables initialized")
 
         except Exception as e:
             self.logger.error(f"Error initializing database tables: {e}")
+
+
+    def store_perception(self, sensor_type, sensor_name, data, interpretation=""):
+        """
+        Store a perception in memory.
+
+        Args:
+            sensor_type: Type of sensor
+            sensor_name: Name of sensor
+            data: Sensor data (JSON string)
+            interpretation: Optional interpretation of data
+
+        Returns:
+            ID of stored perception
+        """
+        try:
+            conn = self._get_connection()
+            if not conn:
+                self.logger.error("No database connection available")
+                return None
+
+            cursor = conn.cursor()
+
+            # Insert into database
+            cursor.execute("""
+                INSERT INTO perceptions
+                (timestamp, sensor_type, sensor_name, data, interpretation)
+                VALUES (?, ?, ?, ?, ?)
+            """, (time.time(), sensor_type, sensor_name, data, interpretation))
+
+            perception_id = cursor.lastrowid
+
+            # Commit changes
+            conn.commit()
+
+            # Trim old perceptions if needed
+            self._trim_perceptions()
+
+            self.logger.debug(f"Stored perception from {sensor_name} ({sensor_type})")
+
+            return perception_id
+
+        except Exception as e:
+            self.logger.error(f"Error storing perception: {e}")
+            return None
+
+    def _trim_perceptions(self):
+        """Trim old perceptions if over capacity."""
+        try:
+            conn = self._get_connection()
+            if not conn:
+                return
+
+            cursor = conn.cursor()
+
+            # Count perceptions
+            cursor.execute("SELECT COUNT(*) FROM perceptions")
+            count = cursor.fetchone()[0]
+
+            # If over capacity, trim
+            if count > self.perception_capacity:
+                # Delete oldest perceptions
+                excess = count - self.perception_capacity
+                cursor.execute("""
+                    DELETE FROM perceptions
+                    WHERE id IN (
+                        SELECT id FROM perceptions
+                        ORDER BY timestamp ASC
+                        LIMIT ?
+                    )
+                """, (excess,))
+
+                conn.commit()
+                self.logger.debug(f"Trimmed {excess} old perceptions")
+
+        except Exception as e:
+            self.logger.error(f"Error trimming perceptions: {e}")
+
+
+    def get_memories_about(self, entity, limit=5):
+        """
+        Get memories related to a specific entity (e.g., person, object).
+
+        Args:
+            entity: The entity to search for
+            limit: Maximum number of memories to return
+
+        Returns:
+            List of memory items
+        """
+        memories = []
+
+        try:
+            # First check episodic memories
+            episodic = self.retrieve_episodic_memories(
+                query=entity,
+                min_importance=0.3,
+                limit=limit
+            )
+
+            for memory in episodic:
+                memories.append({
+                    'type': 'episodic',
+                    'content': memory.get('content', ''),
+                    'timestamp': memory.get('timestamp', 0)
+                })
+
+            # Then check working memory
+            for item in self.working_memory:
+                content = str(item.get('content', ''))
+                if entity.lower() in content.lower():
+                    memories.append({
+                        'type': 'working',
+                        'content': content,
+                        'timestamp': item.get('timestamp', 0)
+                    })
+
+            # Sort by timestamp (most recent first)
+            memories.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
+
+            # Limit results
+            memories = memories[:limit]
+
+            return memories
+
+        except Exception as e:
+            self.logger.error(f"Error getting memories about {entity}: {e}")
+            return []
+
+    # Add to memory.py
+    def store_user_info(self, user_id, user_name, metadata=None):
+        """
+        Store information about a user.
+
+        Args:
+            user_id: Unique identifier for the user
+            user_name: Name of the user
+            metadata: Additional metadata about the user
+
+        Returns:
+            Success flag
+        """
+        try:
+            conn = self._get_connection()
+            if not conn:
+                self.logger.error("No database connection available")
+                return False
+
+            cursor = conn.cursor()
+
+            # Create users table if it doesn't exist
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id TEXT PRIMARY KEY,
+                    name TEXT,
+                    metadata TEXT,
+                    last_interaction REAL
+                )
+            """)
+
+            # Convert metadata to JSON if it's a dict
+            if metadata is not None and not isinstance(metadata, str):
+                metadata = json.dumps(metadata)
+
+            # Insert or update user
+            cursor.execute("""
+                INSERT OR REPLACE INTO users
+                (id, name, metadata, last_interaction)
+                VALUES (?, ?, ?, ?)
+            """, (user_id, user_name, metadata, time.time()))
+
+            conn.commit()
+            self.logger.debug(f"Stored user info for {user_name} ({user_id})")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Error storing user info: {e}")
+            return False
+
+    def get_user_info(self, user_id=None, user_name=None):
+        """
+        Get information about a user.
+
+        Args:
+            user_id: Unique identifier for the user
+            user_name: Name of the user
+
+        Returns:
+            User info dict or None if not found
+        """
+        try:
+            conn = self._get_connection()
+            if not conn:
+                self.logger.error("No database connection available")
+                return None
+
+            cursor = conn.cursor()
+
+            # Check if users table exists
+            cursor.execute("""
+                SELECT name FROM sqlite_master
+                WHERE type='table' AND name='users'
+            """)
+
+            if not cursor.fetchone():
+                return None
+
+            # Query based on provided parameters
+            if user_id:
+                cursor.execute("""
+                    SELECT id, name, metadata, last_interaction
+                    FROM users
+                    WHERE id = ?
+                """, (user_id,))
+            elif user_name:
+                cursor.execute("""
+                    SELECT id, name, metadata, last_interaction
+                    FROM users
+                    WHERE name = ?
+                """, (user_name,))
+            else:
+                return None
+
+            row = cursor.fetchone()
+
+            if not row:
+                return None
+
+            # Parse metadata
+            metadata = row[2]
+            try:
+                if metadata:
+                    metadata = json.loads(metadata)
+            except:
+                pass
+
+            return {
+                'id': row[0],
+                'name': row[1],
+                'metadata': metadata,
+                'last_interaction': row[3]
+            }
+
+        except Exception as e:
+            self.logger.error(f"Error getting user info: {e}")
+            return None
+
+
+    def update_perception(self, perception_id, interpretation=None):
+        """
+        Update a perception with interpretation.
+
+        Args:
+            perception_id: ID of the perception to update
+            interpretation: Interpretation to add
+
+        Returns:
+            Success flag
+        """
+        try:
+            conn = self._get_connection()
+            if not conn:
+                self.logger.error("No database connection available")
+                return False
+
+            cursor = conn.cursor()
+
+            # Update perception
+            cursor.execute("""
+                UPDATE perceptions
+                SET interpretation = ?
+                WHERE id = ?
+            """, (interpretation, perception_id))
+
+            conn.commit()
+            self.logger.debug(f"Updated perception {perception_id} with interpretation")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Error updating perception: {e}")
+            return False
+
+
+    def store_conversation_chunk(self, speaker, content, importance=0.6):
+        """
+        Store a chunk of conversation.
+
+        Args:
+            speaker: Who said it
+            content: What was said
+            importance: Importance score
+
+        Returns:
+            Success flag
+        """
+        try:
+            conn = self._get_connection()
+            if not conn:
+                self.logger.error("No database connection available")
+                return False
+
+            cursor = conn.cursor()
+
+            # Create conversations table if it doesn't exist
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS conversations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp REAL,
+                    speaker TEXT,
+                    content TEXT,
+                    importance REAL
+                )
+            """)
+
+            # Insert conversation
+            cursor.execute("""
+                INSERT INTO conversations
+                (timestamp, speaker, content, importance)
+                VALUES (?, ?, ?, ?)
+            """, (time.time(), speaker, content, importance))
+
+            conn.commit()
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Error storing conversation: {e}")
+            return False
+
+    def get_recent_conversation(self, limit=5):
+        """
+        Get the most recent conversation chunks.
+
+        Args:
+            limit: Maximum number of chunks to return
+
+        Returns:
+            List of conversation chunks
+        """
+        try:
+            conn = self._get_connection()
+            if not conn:
+                self.logger.error("No database connection available")
+                return []
+
+            cursor = conn.cursor()
+
+            # Check if table exists
+            cursor.execute("""
+                SELECT name FROM sqlite_master
+                WHERE type='table' AND name='conversations'
+            """)
+
+            if not cursor.fetchone():
+                return []
+
+            # Get recent conversation
+            cursor.execute("""
+                SELECT id, timestamp, speaker, content, importance
+                FROM conversations
+                ORDER BY timestamp DESC
+                LIMIT ?
+            """, (limit,))
+
+            # Process results
+            conversations = []
+            for row in cursor.fetchall():
+                conversations.append({
+                    'id': row[0],
+                    'timestamp': row[1],
+                    'speaker': row[2],
+                    'content': row[3],
+                    'importance': row[4]
+                })
+
+            # Reverse to get chronological order
+            conversations.reverse()
+
+            return conversations
+
+        except Exception as e:
+            self.logger.error(f"Error getting recent conversation: {e}")
+            return []
+
+    # Add to memory.py
+    def store_fact(self, entity, attribute, value, source="conversation"):
+        """
+        Store a fact about an entity.
+
+        Args:
+            entity: The entity the fact is about (e.g., 'user:12345')
+            attribute: The attribute (e.g., 'age')
+            value: The value (e.g., '42')
+            source: Where this fact came from
+
+        Returns:
+            Success flag
+        """
+        try:
+            conn = self._get_connection()
+            if not conn:
+                self.logger.error("No database connection available")
+                return False
+
+            cursor = conn.cursor()
+
+            # Create facts table if it doesn't exist
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS facts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    entity TEXT,
+                    attribute TEXT,
+                    value TEXT,
+                    source TEXT,
+                    timestamp REAL,
+                    confidence REAL
+                )
+            """)
+
+            # Check if fact already exists
+            cursor.execute("""
+                SELECT id FROM facts
+                WHERE entity = ? AND attribute = ?
+            """, (entity, attribute))
+
+            existing_id = cursor.fetchone()
+
+            if existing_id:
+                # Update existing fact
+                cursor.execute("""
+                    UPDATE facts
+                    SET value = ?, source = ?, timestamp = ?, confidence = ?
+                    WHERE id = ?
+                """, (value, source, time.time(), 0.9, existing_id[0]))
+            else:
+                # Insert new fact
+                cursor.execute("""
+                    INSERT INTO facts
+                    (entity, attribute, value, source, timestamp, confidence)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (entity, attribute, value, source, time.time(), 0.9))
+
+            conn.commit()
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Error storing fact: {e}")
+            return False
+
+    def get_facts(self, entity=None, attribute=None, limit=10):
+        """
+        Get facts about an entity.
+
+        Args:
+            entity: The entity to get facts about (optional)
+            attribute: The attribute to get (optional)
+            limit: Maximum number of facts to return
+
+        Returns:
+            List of facts
+        """
+        try:
+            conn = self._get_connection()
+            if not conn:
+                self.logger.error("No database connection available")
+                return []
+
+            cursor = conn.cursor()
+
+            # Check if table exists
+            cursor.execute("""
+                SELECT name FROM sqlite_master
+                WHERE type='table' AND name='facts'
+            """)
+
+            if not cursor.fetchone():
+                return []
+
+            # Build query
+            sql = "SELECT id, entity, attribute, value, source, timestamp, confidence FROM facts"
+            params = []
+
+            where_clauses = []
+            if entity:
+                where_clauses.append("entity = ?")
+                params.append(entity)
+
+            if attribute:
+                where_clauses.append("attribute = ?")
+                params.append(attribute)
+
+            if where_clauses:
+                sql += " WHERE " + " AND ".join(where_clauses)
+
+            sql += " ORDER BY timestamp DESC LIMIT ?"
+            params.append(limit)
+
+            # Execute query
+            cursor.execute(sql, params)
+
+            # Process results
+            facts = []
+            for row in cursor.fetchall():
+                facts.append({
+                    'id': row[0],
+                    'entity': row[1],
+                    'attribute': row[2],
+                    'value': row[3],
+                    'source': row[4],
+                    'timestamp': row[5],
+                    'confidence': row[6]
+                })
+
+            return facts
+
+        except Exception as e:
+            self.logger.error(f"Error getting facts: {e}")
+            return []
+
+
+    def get_last_summary_time(self):
+        """
+        Get the timestamp of the last conversation summary.
+
+        Returns:
+            Timestamp of last summary or None if no summaries exist
+        """
+        try:
+            conn = self._get_connection()
+            if not conn:
+                self.logger.error("No database connection available")
+                return None
+
+            cursor = conn.cursor()
+
+            # Query for last summary
+            cursor.execute("""
+                SELECT timestamp
+                FROM episodic_memories
+                WHERE episode_type = 'conversation_summary'
+                ORDER BY timestamp DESC
+                LIMIT 1
+            """)
+
+            row = cursor.fetchone()
+
+            if row:
+                return row[0]
+
+            return None
+
+        except Exception as e:
+            self.logger.error(f"Error getting last summary time: {e}")
+            return None
+
+
+
+    def get_conversation_summaries(self, user_id=None, limit=5):
+        """
+        Get conversation summaries for a user.
+
+        Args:
+            user_id: User ID (optional)
+            limit: Maximum number of summaries to return
+
+        Returns:
+            List of conversation summaries
+        """
+        try:
+            conn = self._get_connection()
+            if not conn:
+                self.logger.error("No database connection available")
+                return []
+
+            cursor = conn.cursor()
+
+            # Query for summaries
+            if user_id:
+                cursor.execute("""
+                    SELECT id, timestamp, content
+                    FROM episodic_memories
+                    WHERE episode_type = 'conversation_summary'
+                    AND content LIKE ?
+                    ORDER BY timestamp DESC
+                    LIMIT ?
+                """, (f'%"user_id": "{user_id}"%', limit))
+            else:
+                cursor.execute("""
+                    SELECT id, timestamp, content
+                    FROM episodic_memories
+                    WHERE episode_type = 'conversation_summary'
+                    ORDER BY timestamp DESC
+                    LIMIT ?
+                """, (limit,))
+
+            summaries = []
+            for row in cursor.fetchall():
+                try:
+                    content = json.loads(row[2])
+
+                    summaries.append({
+                        'id': row[0],
+                        'timestamp': row[1],
+                        'user_id': content.get('user_id'),
+                        'conversation_id': content.get('conversation_id'),
+                        'summary': content.get('summary')
+                    })
+                except:
+                    # Skip corrupted entries
+                    continue
+
+            return summaries
+
+        except Exception as e:
+            self.logger.error(f"Error getting conversation summaries: {e}")
+            return []
+
+
+    def get_related_memories(self, query, limit=5):
+        """
+        Get memories related to a specific topic or query.
+
+        Args:
+            query: The topic or query to search for
+            limit: Maximum number of memories to return
+
+        Returns:
+            List of related memories
+        """
+        try:
+            conn = self._get_connection()
+            if not conn:
+                self.logger.error("No database connection available")
+                return []
+
+            # First, search in conversation summaries
+            cursor = conn.cursor()
+
+            # Prepare query terms
+            query_terms = query.lower().split()
+
+            # Build SQL query with OR conditions for each term
+            sql_query = """
+                SELECT id, timestamp, content, importance
+                FROM episodic_memories
+                WHERE episode_type = 'conversation_summary'
+                AND (
+            """
+
+            like_conditions = []
+            params = []
+
+            for term in query_terms:
+                if len(term) > 3:  # Skip short terms
+                    like_conditions.append("content LIKE ?")
+                    params.append(f"%{term}%")
+
+            if not like_conditions:
+                # If no valid terms, use the whole query
+                like_conditions.append("content LIKE ?")
+                params.append(f"%{query}%")
+
+            sql_query += " OR ".join(like_conditions)
+            sql_query += ") ORDER BY timestamp DESC LIMIT ?"
+            params.append(limit)
+
+            # Run query
+            cursor.execute(sql_query, params)
+
+            # Process results
+            memories = []
+            for row in cursor.fetchall():
+                try:
+                    content = json.loads(row[2])
+
+                    memories.append({
+                        'type': 'conversation_summary',
+                        'id': row[0],
+                        'timestamp': row[1],
+                        'content': content.get('summary', ''),
+                        'importance': row[3]
+                    })
+                except:
+                    # Skip corrupted entries
+                    continue
+
+            # If we found enough memories, return them
+            if len(memories) >= limit:
+                return memories
+
+            # Otherwise, also search in facts
+            remaining = limit - len(memories)
+
+            # Search in facts
+            sql_query = """
+                SELECT id, entity, attribute, value, timestamp
+                FROM facts
+                WHERE (
+            """
+
+            like_conditions = []
+            params = []
+
+            for term in query_terms:
+                if len(term) > 3:  # Skip short terms
+                    like_conditions.append("value LIKE ?")
+                    params.append(f"%{term}%")
+
+            if not like_conditions:
+                # If no valid terms, use the whole query
+                like_conditions.append("value LIKE ?")
+                params.append(f"%{query}%")
+
+            sql_query += " OR ".join(like_conditions)
+            sql_query += ") ORDER BY timestamp DESC LIMIT ?"
+            params.append(remaining)
+
+            # Run query
+            cursor.execute(sql_query, params)
+
+            # Process results
+            for row in cursor.fetchall():
+                memories.append({
+                    'type': 'fact',
+                    'id': row[0],
+                    'entity': row[1],
+                    'attribute': row[2],
+                    'value': row[3],
+                    'timestamp': row[4]
+                })
+
+            return memories
+
+        except Exception as e:
+            self.logger.error(f"Error getting related memories: {e}")
+            return []
+
+
+    def decay_memories(self, threshold_days=30):
+        """
+        Apply memory decay to old, low-importance memories.
+
+        Args:
+            threshold_days: Age threshold in days
+
+        Returns:
+            Number of decayed memories
+        """
+        try:
+            conn = self._get_connection()
+            if not conn:
+                self.logger.error("No database connection available")
+                return 0
+
+            cursor = conn.cursor()
+
+            # Calculate threshold timestamp
+            threshold_timestamp = time.time() - (threshold_days * 24 * 60 * 60)
+
+            # Decay episodic memories
+            cursor.execute("""
+                DELETE FROM episodic_memories
+                WHERE timestamp < ?
+                AND importance < 0.7  -- Only decay low-importance memories
+                AND episode_type != 'conversation_summary'  -- Keep summaries
+            """, (threshold_timestamp,))
+
+            # Count how many were deleted
+            episodic_count = cursor.rowcount
+
+            # Decay facts
+            cursor.execute("""
+                DELETE FROM facts
+                WHERE timestamp < ?
+                AND attribute LIKE 'conversation_%'  -- Only decay conversation facts
+            """, (threshold_timestamp,))
+
+            # Count how many were deleted
+            fact_count = cursor.rowcount
+
+            # Commit changes
+            conn.commit()
+
+            total_count = episodic_count + fact_count
+            self.logger.info(f"Decayed {total_count} old memories ({episodic_count} episodic, {fact_count} facts)")
+
+            return total_count
+
+        except Exception as e:
+            self.logger.error(f"Error decaying memories: {e}")
+            return 0

@@ -1,0 +1,59 @@
+[2025-03-31 10:34:24] [INFO] [root] Logging to logs/agent_20250331-103424.log
+[2025-03-31 10:34:24] [INFO] [__main__] Starting Embodied AI Agent
+[2025-03-31 10:34:24] [INFO] [utils.config] Loading configuration from config.yaml
+[2025-03-31 10:34:24] [INFO] [utils.config] Configuration validation complete
+[2025-03-31 10:34:24] [INFO] [llm.manager.vision_interpreter] Initialized model vision_interpreter (ollama)
+[2025-03-31 10:34:24] [INFO] [llm.manager] Initialized model: vision_interpreter
+[2025-03-31 10:34:24] [INFO] [llm.manager.audio_interpreter] Initialized model audio_interpreter (ollama)
+[2025-03-31 10:34:24] [INFO] [llm.manager] Initialized model: audio_interpreter
+[2025-03-31 10:34:24] [INFO] [llm.manager.general_interpreter] Initialized model general_interpreter (ollama)
+[2025-03-31 10:34:24] [INFO] [llm.manager] Initialized model: general_interpreter
+[2025-03-31 10:34:24] [INFO] [llm.manager.reasoning_engine] Initialized model reasoning_engine (ollama)
+[2025-03-31 10:34:24] [INFO] [llm.manager] Initialized model: reasoning_engine
+[2025-03-31 10:34:24] [INFO] [llm.manager.emotion_engine] Initialized model emotion_engine (ollama)
+[2025-03-31 10:34:24] [INFO] [llm.manager] Initialized model: emotion_engine
+[2025-03-31 10:34:24] [INFO] [llm.manager.planning_engine] Initialized model planning_engine (ollama)
+[2025-03-31 10:34:24] [INFO] [llm.manager] Initialized model: planning_engine
+[2025-03-31 10:34:24] [INFO] [llm.manager.consciousness_engine] Initialized model consciousness_engine (ollama)
+[2025-03-31 10:34:24] [INFO] [llm.manager] Initialized model: consciousness_engine
+[2025-03-31 10:34:24] [INFO] [llm.manager] LLM Manager initialized with 7 models and 4 workers
+[2025-03-31 10:34:24] [INFO] [core.memory] Memory database initialized
+[2025-03-31 10:34:24] [INFO] [core.memory] Memory manager initialized with storage at memory
+[2025-03-31 10:34:24] [INFO] [core.agent] Initializing hardware for platform: mac
+[2025-03-31 10:34:24] [INFO] [hardware.sensors.CameraSensor] Initialized camera sensor: webcam
+[2025-03-31 10:34:24] [INFO] [hardware.sensors] Added sensor: webcam (camera)
+[2025-03-31 10:34:24] [INFO] [hardware.sensors.MicrophoneSensor] Initialized microphone sensor: microphone
+[2025-03-31 10:34:24] [INFO] [hardware.sensors] Added sensor: microphone (microphone)
+[2025-03-31 10:34:24] [INFO] [hardware.sensors] Sensor manager initialized for platform mac with 2 sensors
+[2025-03-31 10:34:24] [INFO] [hardware.actuators.DisplayActuator] Initialized display actuator: screen
+[2025-03-31 10:34:24] [INFO] [hardware.actuators] Added actuator: screen (display)
+[2025-03-31 10:34:24] [INFO] [hardware.actuators.SpeakerActuator] Initialized speaker actuator: speakers
+[2025-03-31 10:34:24] [INFO] [hardware.actuators] Added actuator: speakers (speaker)
+[2025-03-31 10:34:24] [INFO] [hardware.actuators] Actuator manager initialized for platform mac with 2 actuators
+[2025-03-31 10:34:24] [INFO] [core.perception] Perception module initialized
+[2025-03-31 10:34:24] [INFO] [core.cognition] Cognition module initialized
+[2025-03-31 10:34:24] [INFO] [core.consciousness] Consciousness module initialized
+[2025-03-31 10:34:24] [INFO] [core.agent] Agent initialized successfully
+[2025-03-31 10:34:24] [INFO] [core.agent] Starting agent
+[2025-03-31 10:34:24] [INFO] [hardware.sensors.CameraSensor] Started simulated camera: webcam
+[2025-03-31 10:34:24] [INFO] [hardware.sensors.MicrophoneSensor] Started simulated microphone: microphone
+[2025-03-31 10:34:24] [INFO] [hardware.actuators.DisplayActuator] Started simulated display: screen
+[2025-03-31 10:34:24] [INFO] [hardware.actuators.SpeakerActuator] Started simulated speaker: speakers
+[2025-03-31 10:34:24] [INFO] [hardware.actuators.DisplayActuator] Opened display output file: memory/output/display.txt
+[2025-03-31 10:34:24] [INFO] [hardware.actuators.SpeakerActuator] Opened speaker output file: memory/output/speech.txt
+[2025-03-31 10:34:24] [INFO] [core.memory] Memory manager started
+[2025-03-31 10:34:24] [INFO] [core.agent] Agent started successfully
+[2025-03-31 10:34:54] [INFO] [__main__] Keyboard interrupt detected
+[2025-03-31 10:34:54] [INFO] [core.agent] Stopping agent
+[2025-03-31 10:34:54] [INFO] [core.consciousness] Stopping consciousness module
+[2025-03-31 10:34:54] [INFO] [core.cognition] Stopping cognition module
+[2025-03-31 10:34:54] [INFO] [core.perception] Stopping perception module
+[2025-03-31 10:34:54] [INFO] [core.memory] Memory manager stopped
+[2025-03-31 10:34:54] [INFO] [hardware.actuators.DisplayActuator] Closed display output file
+[2025-03-31 10:34:54] [INFO] [hardware.actuators.DisplayActuator] Stopped display: screen
+[2025-03-31 10:34:55] [INFO] [hardware.actuators.SpeakerActuator] Closed speaker output file
+[2025-03-31 10:34:55] [INFO] [hardware.actuators.SpeakerActuator] Stopped speaker: speakers
+[2025-03-31 10:34:57] [INFO] [hardware.sensors.CameraSensor] Stopped camera: webcam
+[2025-03-31 10:34:57] [INFO] [hardware.sensors.MicrophoneSensor] Stopped microphone: microphone
+[2025-03-31 10:34:57] [INFO] [core.agent] Agent stopped
+[2025-03-31 10:34:57] [INFO] [__main__] Agent stopped

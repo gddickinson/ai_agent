@@ -4,12 +4,12 @@
 hardware:
   # Current platform to use
   platform: mac  # 'mac' or 'robot'
-  
+
   # Sensor configurations
   sensors:
     # Default sensors for all platforms
     default: []
-    
+
     # Mac-specific sensors
     mac:
       - name: webcam
@@ -22,7 +22,7 @@ hardware:
           - "A home office with a desk, computer, bookshelf, and window. Natural light coming through the window."
           - "A person sitting at a desk, typing on a keyboard while looking at a computer screen."
           - "An empty desk with just a computer, the screen shows a terminal window with logs scrolling by."
-      
+
       - name: microphone
         type: microphone
         enabled: true
@@ -34,7 +34,7 @@ hardware:
           - "Run a diagnostic check please."
           - "Tell me what you're currently thinking about."
           - "What's your current emotional state?"
-    
+
     # Robot-specific sensors
     robot:
       - name: camera
@@ -42,19 +42,19 @@ hardware:
         enabled: true
         frame_interval: 1.0  # seconds between frames
         simulate: true
-      
+
       - name: microphone
         type: microphone
         enabled: true
         capture_interval: 2.0  # seconds between audio captures
         simulate: true
-      
+
       - name: lidar
         type: lidar
         enabled: true
         read_interval: 1.0  # seconds between readings
         simulate: true
-      
+
       - name: temperature
         type: temperature
         enabled: true
@@ -63,7 +63,7 @@ hardware:
         simulate_min: 15.0
         simulate_max: 30.0
         simulate_unit: "°C"
-      
+
       - name: battery
         type: battery
         enabled: true
@@ -72,12 +72,12 @@ hardware:
         simulate_min: 0.0
         simulate_max: 100.0
         simulate_unit: "%"
-  
+
   # Actuator configurations
   actuators:
     # Default actuators for all platforms
     default: []
-    
+
     # Mac-specific actuators
     mac:
       - name: screen
@@ -85,31 +85,31 @@ hardware:
         enabled: true
         output_file: "memory/output/display.txt"
         simulate: true
-      
+
       - name: speakers
         type: speaker
         enabled: true
         output_file: "memory/output/speech.txt"
         simulate: true
-    
+
     # Robot-specific actuators
     robot:
       - name: screen
         type: display
         enabled: true
         simulate: true
-      
+
       - name: speaker
         type: speaker
         enabled: true
         simulate: true
-      
+
       - name: left_wheel
         type: motor
         motor_type: wheel
         enabled: true
         simulate: true
-      
+
       - name: right_wheel
         type: motor
         motor_type: wheel
@@ -120,52 +120,52 @@ hardware:
 llm:
   # Number of worker threads for LLM processing
   num_workers: 4
-  
+
   # Model configurations
   models:
     # Perception models
     vision_interpreter:
       type: ollama
-      model_id: llama3
+      model_id: llama3:latest
       api_base: http://localhost:11434/api
-    
+
     audio_interpreter:
       type: ollama
-      model_id: llama3
+      model_id: llama3:latest
       api_base: http://localhost:11434/api
-    
+
     general_interpreter:
       type: ollama
-      model_id: llama3
+      model_id: llama3:latest
       api_base: http://localhost:11434/api
-    
+
     # Cognition models
     reasoning_engine:
       type: ollama
-      model_id: llama3
+      model_id: llama3:latest
       api_base: http://localhost:11434/api
-    
+
     emotion_engine:
       type: ollama
-      model_id: llama3
+      model_id: llama3:latest
       api_base: http://localhost:11434/api
-    
+
     planning_engine:
       type: ollama
-      model_id: llama3
+      model_id: llama3:latest
       api_base: http://localhost:11434/api
-    
+
     # Consciousness model
     consciousness_engine:
       type: ollama
-      model_id: llama3
+      model_id: llama3:latest
       api_base: http://localhost:11434/api
 
 # Memory settings
 memory:
   # Directory for memory storage
   memory_dir: "memory"
-  
+
   # Capacity limits
   perception_capacity: 100  # Number of recent perceptions to keep in memory
   working_memory_capacity: 20  # Number of items in working memory
@@ -176,7 +176,7 @@ perception:
   vision_model: vision_interpreter
   audio_model: audio_interpreter
   general_model: general_interpreter
-  
+
   # Processing intervals for different sensor types (seconds)
   process_intervals:
     camera: 5.0
@@ -192,7 +192,7 @@ cognition:
   reasoning_model: reasoning_engine
   emotion_model: emotion_engine
   planning_model: planning_engine
-  
+
   # Processing intervals (seconds)
   reasoning_interval: 5.0
   emotion_interval: 3.0
@@ -202,10 +202,10 @@ cognition:
 consciousness:
   # LLM model to use for consciousness
   model: consciousness_engine
-  
+
   # Processing interval (seconds)
   process_interval: 0.5
-  
+
   # Maximum length of internal monologue
   max_monologue_length: 50
 

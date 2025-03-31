@@ -377,3 +377,79 @@ class PerceptionModule:
         """Stop the perception module."""
         self.logger.info("Stopping perception module")
         # Nothing to stop in this implementation
+
+
+    def _store_raw_perception(self, sensor_name, sensor_type, data):
+        """
+        Store raw perception data in memory.
+
+        Args:
+            sensor_name: Name of the sensor
+            sensor_type: Type of sensor
+            data: Sensor data
+
+        Returns:
+            ID of stored perception
+        """
+        try:
+            # Convert data to JSON string
+            data_json = json.dumps(data)
+
+            # Store in memory system
+            perception_id = self.memory.store_perception(
+                sensor_type=sensor_type,
+                sensor_name=sensor_name,
+                data=data_json,
+                interpretation=""
+            )
+
+            return perception_id
+
+        except Exception as e:
+            self.logger.error(f"Error storing raw perception: {e}")
+            return None
+
+
+    def _process_camera_data(self, sensor_name, data, perception_id=None):
+        """
+        Process camera data.
+
+        Args:
+            sensor_name: Name of the camera sensor
+            data: Camera data
+            perception_id: ID of stored raw perception (if any)
+        """
+        try:
+            # Extract frame description for simulated cameras
+            if data.get('simulated', False) and 'description' in data:
+                description = data['description']
+
+                # Store the interpretation
+                if perception_id:
+                    # Update the perception with interpretation
+                    self.memory.update_perception(
+                        perception_id=perception_id,
+                        interpretation=json.dumps({
+                            'type': 'visual',
+                            'description': description,
+                            'timestamp': data.get('timestamp', time.time())
+                        })
+                    )
+
+                # Add to working memory
+                self.memory.add_to_working_memory(
+                    item={
+                        'type': 'perception',
+                        'sensor': sensor_name,
+                        'sensor_type': 'camera',
+                        'content': f"Visual: {description}",
+                        'timestamp': data.get('timestamp', time.time())
+                    },
+                    importance=0.5  # Medium importance for visual input
+                )
+
+                self.logger.debug(f"Processed camera data: {description[:100]}...")
+
+        except Exception as e:
+            self.logger.error(f"Error processing camera data: {e}")
+            self.logger.error(traceback.format_exc())

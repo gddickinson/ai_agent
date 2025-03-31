@@ -4,6 +4,7 @@ Handles interfacing with various sensor hardware on different platforms.
 """
 
 import logging
+import traceback
 import time
 import threading
 import queue
@@ -12,6 +13,7 @@ from abc import ABC, abstractmethod
 import json
 import os
 import base64
+import random
 
 class SensorInterface(ABC):
     """Base class for sensor interfaces."""
@@ -51,24 +53,24 @@ class SensorInterface(ABC):
         pass
 
 class CameraSensor(SensorInterface):
-    """Interface for camera sensors."""
+    """Interface for camera input."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config):
         """Initialize camera sensor."""
         super().__init__(config)
         self.type = 'camera'
-        self.data_queue = queue.Queue(maxsize=10)  # Buffer for latest frame
+        self.data_queue = queue.Queue()
         self.thread = None
+
+        # Camera settings
         self.frame_interval = config.get('frame_interval', 1.0)  # seconds between frames
 
-        # Simulated camera settings for testing
-        self.simulate = config.get('simulate', True)
-        self.simulate_data = config.get('simulate_data', [
-            "A desk with a computer monitor, keyboard, and coffee mug. The monitor displays a code editor.",
-            "A living room with a sofa, coffee table, and bookshelf. Natural light comes in through the windows.",
-            "A kitchen with counter, sink, and refrigerator. There are some dishes in the sink.",
-            "An office space with multiple desks, office chairs, and plants. Several people are working at computers."
-        ])
+        # Simulation settings
+        self.simulate = config.get('simulate', False)
+        self.simulate_data = config.get('simulate_data', [])
+
+        # Initialize frame counter
+        self.frame_count = 0
 
         self.logger.info(f"Initialized camera sensor: {self.name}")
 
@@ -118,9 +120,10 @@ class CameraSensor(SensorInterface):
 
         # Get simulated data if configured
         simulated_data = self.config.get('simulate_data', [
-            "A desk with a computer.",
-            "A room with furniture.",
-            "A person working at a desk."
+            "A desk with a computer monitor, keyboard, and mouse.",
+            "A room with various furniture and equipment.",
+            "A person sitting at a desk working on a computer.",
+            "An office space with natural light coming through windows."
         ])
 
         try:
@@ -152,6 +155,7 @@ class CameraSensor(SensorInterface):
 
         except Exception as e:
             self.logger.error(f"Error in camera simulation: {e}")
+            self.logger.error(traceback.format_exc())
 
         finally:
             self.logger.debug(f"Camera simulation stopping for {self.name}")
@@ -219,55 +223,54 @@ class MicrophoneSensor(SensorInterface):
 
     def _simulate_microphone(self):
         """Simulate microphone data for testing."""
-        import random
-
         self.logger.debug(f"Starting microphone simulation for {self.name}")
 
-        while self.running:
-            try:
-                # Generate simulated audio
-                timestamp = time.time()
+        # Get simulated data if configured
+        simulated_data = self.config.get('simulate_data', [
+            "Hello, can you hear me?",
+            "What's the current time?",
+            "Tell me about your capabilities.",
+            "What are you thinking about?",
+            "What do you see right now?"
+        ])
 
-                # 70% chance of silence
-                if random.random() < 0.7:
-                    audio = ""
-                else:
-                    # Pick a random audio sample
-                    audio = random.choice(self.simulate_data)
+        audio_count = 0
 
-                # Skip empty audio
-                if not audio:
-                    time.sleep(self.capture_interval)
-                    continue
+        try:
+            while self.running:
+                # Only generate audio occasionally to avoid flooding
+                if random.random() < 0.3:  # 30% chance each cycle
+                    # Generate simulated audio
+                    if simulated_data:
+                        # Rotate through simulated data
+                        audio_text = simulated_data[audio_count % len(simulated_data)]
+                        audio_count += 1
+                    else:
+                        # Default text
+                        audio_text = "Simulated audio input."
 
-                # Create audio data
-                audio_data = {
-                    'type': 'microphone',
-                    'timestamp': timestamp,
-                    'format': 'text',  # Simulated as text
-                    'content': audio,
-                    'source': self.name
-                }
+                    # Create simulated audio data
+                    audio_data = {
+                        'type': 'microphone',
+                        'timestamp': time.time(),
+                        'audio_id': audio_count,
+                        'text': audio_text,
+                        'simulated': True
+                    }
 
-                # Put in queue, replacing old audio if full
-                try:
-                    self.data_queue.put_nowait(audio_data)
-                except queue.Full:
-                    # Remove old audio
-                    try:
-                        self.data_queue.get_nowait()
-                        self.data_queue.task_done()
-                    except queue.Empty:
-                        pass
-                    # Try again
-                    self.data_queue.put_nowait(audio_data)
+                    # Add to data queue
+                    self.data_queue.put(audio_data)
+                    self.logger.debug(f"Generated simulated audio: {audio_text[:30]}...")
 
-                # Sleep until next capture
+                # Sleep for capture interval
                 time.sleep(self.capture_interval)
 
-            except Exception as e:
-                self.logger.error(f"Error in microphone simulation: {e}")
-                time.sleep(1.0)  # Sleep longer on error
+        except Exception as e:
+            self.logger.error(f"Error in microphone simulation: {e}")
+            self.logger.error(traceback.format_exc())
+
+        finally:
+            self.logger.debug(f"Microphone simulation stopping for {self.name}")
 
 class GenericSensor(SensorInterface):
     """Interface for generic sensors (temperature, motion, etc.)."""

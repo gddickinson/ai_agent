@@ -13,6 +13,7 @@ from core.consciousness import ConsciousnessModule
 from core.perception import PerceptionModule
 from core.cognition import CognitionModule
 from core.memory import MemoryManager
+from core.autonomy import AutonomyModule
 from hardware.sensors import SensorManager
 from hardware.actuators import ActuatorManager
 from llm.manager import LLMManager
@@ -63,12 +64,25 @@ class EmbodiedAgent:
         )
 
         self.consciousness = ConsciousnessModule(
-            config['consciousness'],
+            config.get('consciousness', {}),
             self.llm_manager,
             self.memory,
             self.actuators
         )
 
+        # Initialize autonomy module if configured
+        if 'autonomy' in config:
+            self.autonomy = AutonomyModule(
+                config['autonomy'],
+                self.llm_manager,
+                self.memory,
+                self.consciousness
+            )
+            # Connect autonomy module to consciousness
+            self.consciousness.set_autonomy_module(self.autonomy)
+        else:
+            self.autonomy = None
+            self.logger.info("Autonomy module not configured, running without autonomous thinking")
 
         # Register callbacks for message handling
         self.consciousness.register_message_callback(
@@ -107,6 +121,11 @@ class EmbodiedAgent:
         self._start_cognition_processing()
         self._start_consciousness_processing()
 
+        # Start autonomy module if available
+        if self.autonomy:
+            self.autonomy.start()
+            self.logger.info("Autonomy module started")
+
         self.is_running = True
         self.logger.info("Agent started successfully")
 
@@ -125,6 +144,8 @@ class EmbodiedAgent:
                 thread.join(timeout=2.0)
 
         # Stop components
+        if self.autonomy:
+            self.autonomy.stop()
         self.consciousness.stop()
         self.cognition.stop()
         self.perception.stop()

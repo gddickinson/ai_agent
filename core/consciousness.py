@@ -12,6 +12,7 @@ import threading
 import traceback
 from typing import Dict, Any, List, Optional, Callable
 import re
+import random
 
 class ConsciousnessModule:
     """
@@ -50,17 +51,34 @@ class ConsciousnessModule:
 
         # Internal monologue
         self.internal_monologue = []
-        self.max_monologue_length = config.get('max_monologue_length', 20)
+        self.max_monologue_length = config.get('max_monologue_length', 50)
 
         # Processing intervals
         self.process_interval = config.get('process_interval', 0.5)
+
+        # Conversation initiation settings
+        self.conversation_initiation_enabled = config.get('enable_conversation_initiation', True)
+        self.last_initiation_time = 0
+        self.min_initiation_interval = config.get('min_initiation_interval', 3600.0)  # Default 1 hour
+        self.idle_initiation_threshold = config.get('idle_initiation_threshold', 1800.0)  # Default 30 min
 
         # Communication callbacks
         self.message_received_callbacks = []
         self.message_sent_callbacks = []
 
+        # Autonomy module reference (will be set by agent)
+        self.autonomy = None
+
+        # Conversation tracking
+        self.conversation_active = False
+        self.last_conversation_time = 0
+
         # Running flag
         self.running = True
+
+        # Initiative flags
+        self.can_initiate_conversation = False  # Will be enabled after startup delay
+        self.initiative_startup_delay = 300.0  # 5 minutes after startup
 
         self.logger.info("Consciousness module initialized")
 
@@ -73,15 +91,25 @@ class ConsciousnessModule:
             # Process any incoming messages
             self._process_incoming_messages()
 
-            # Generate internal monologue
-            self._generate_internal_monologue()
+            # Check for conversation initiation
+            self._check_conversation_initiation()
+
+            # Generate internal monologue (if autonomous thinking is not replacing this)
+            if not self.autonomy:
+                self._generate_internal_monologue()
 
             # Process any pending actions
             self._process_pending_actions()
+
+            # Enable conversation initiation after startup delay
+            if not self.can_initiate_conversation:
+                if time.time() - self.last_initiation_time > self.initiative_startup_delay:
+                    self.can_initiate_conversation = True
+                    self.logger.info("Conversation initiation capability enabled")
+
         except Exception as e:
             self.logger.error(f"Error in consciousness processing: {e}")
             self.logger.error(traceback.format_exc())
-
 
     def _process_incoming_messages(self):
         """Process incoming messages from the outside world."""
@@ -137,6 +165,109 @@ class ConsciousnessModule:
                 self.logger.error(f"Error processing incoming message: {e}")
                 self.logger.error(traceback.format_exc())
 
+    def _add_to_monologue(self, thought):
+        """
+        Add a thought to the internal monologue.
+
+        Args:
+            thought: The thought to add
+        """
+        try:
+            # Clean up thought text
+            thought = thought.strip()
+
+            # Skip if empty
+            if not thought:
+                return
+
+            # Add timestamp
+            timestamp = time.strftime("%H:%M:%S", time.localtime())
+            thought_entry = f"[{timestamp}] {thought}"
+
+            # Add to monologue
+            self.internal_monologue.append(thought_entry)
+
+            # Trim if over max length
+            while len(self.internal_monologue) > self.max_monologue_length:
+                self.internal_monologue.pop(0)
+
+            # Store in memory occasionally
+            if len(self.internal_monologue) % 5 == 0:
+                self.memory.store_episodic_memory({
+                    'timestamp': time.time(),
+                    'episode_type': 'internal_monologue',
+                    'content': json.dumps({
+                        'thoughts': self.internal_monologue[-5:]
+                    }),
+                    'importance': 0.4  # Moderate importance
+                })
+
+            self.logger.debug(f"Added to monologue: {thought[:50]}...")
+
+        except Exception as e:
+            self.logger.error(f"Error adding to monologue: {e}")
+            self.logger.error(traceback.format_exc())
+
+    def _check_conversation_initiation(self):
+        """Check if the agent should initiate a conversation."""
+        if not self.autonomy or not self.conversation_initiation_enabled or not self.can_initiate_conversation:
+            return
+
+        current_time = time.time()
+
+        # Check if enough time has passed since last initiation
+        if current_time - self.last_initiation_time < self.min_initiation_interval:
+            return
+
+        # Check if we've been idle (no human messages) for the threshold time
+        idle_time = current_time - self.last_conversation_time
+        if idle_time < self.idle_initiation_threshold:
+            return
+
+        # Make initiation decision based on state
+        # Higher chance if agent has high curiosity and there are interesting topics
+        should_initiate = False
+
+        # Get current emotional state for decision
+        internal_state = self._get_cognition_state()
+        curiosity = internal_state.get('emotions', {}).get('curiosity', 0)
+
+        # Base probability on curiosity level and idle time
+        base_probability = min(0.8, curiosity + (idle_time / (3600.0 * 3)))  # Max 80% chance
+
+        # Adjust based on time of day (more chatty during typical waking hours)
+        hour = time.localtime().tm_hour
+        if 9 <= hour <= 22:  # 9 AM to 10 PM
+            base_probability *= 1.5
+        else:
+            base_probability *= 0.5
+
+        # Make the decision
+        if random.random() < base_probability:
+            should_initiate = True
+
+        if should_initiate:
+            self._initiate_conversation()
+            self.last_initiation_time = current_time
+
+    def _initiate_conversation(self):
+        """Initiate a conversation with the human."""
+        self.logger.info("Initiating conversation")
+
+        try:
+            # Generate conversation starter via autonomy module
+            message = self.autonomy.initiate_conversation()
+
+            if message:
+                # Send the message
+                self._send_response(message)
+
+                # Set conversation active flag
+                self.conversation_active = True
+
+        except Exception as e:
+            self.logger.error(f"Error initiating conversation: {e}")
+            self.logger.error(traceback.format_exc())
 
     def _generate_response(self, message):
         """
@@ -268,7 +399,6 @@ class ConsciousnessModule:
             'fallback': True
         }
 
-
     def _send_response(self, response):
         """
         Send a response to the outside world.
@@ -388,49 +518,6 @@ class ConsciousnessModule:
             self.logger.error(f"Error generating internal monologue: {e}")
             self.logger.error(traceback.format_exc())
 
-    def _add_to_monologue(self, thought):
-        """
-        Add a thought to the internal monologue.
-
-        Args:
-            thought: The thought to add
-        """
-        try:
-            # Clean up thought text
-            thought = thought.strip()
-
-            # Skip if empty
-            if not thought:
-                return
-
-            # Add timestamp
-            timestamp = time.strftime("%H:%M:%S", time.localtime())
-            thought_entry = f"[{timestamp}] {thought}"
-
-            # Add to monologue
-            self.internal_monologue.append(thought_entry)
-
-            # Trim if over max length
-            while len(self.internal_monologue) > self.max_monologue_length:
-                self.internal_monologue.pop(0)
-
-            # Store in memory occasionally
-            if len(self.internal_monologue) % 5 == 0:
-                self.memory.store_episodic_memory({
-                    'timestamp': time.time(),
-                    'episode_type': 'internal_monologue',
-                    'content': json.dumps({
-                        'thoughts': self.internal_monologue[-5:]
-                    }),
-                    'importance': 0.4  # Moderate importance
-                })
-
-            self.logger.debug(f"Added to monologue: {thought[:50]}...")
-
-        except Exception as e:
-            self.logger.error(f"Error adding to monologue: {e}")
-            self.logger.error(traceback.format_exc())
-
     def _process_pending_actions(self):
         """Process any pending actions based on internal state."""
         try:
@@ -482,45 +569,265 @@ class ConsciousnessModule:
             self.logger.error(f"Error processing pending actions: {e}")
             self.logger.error(traceback.format_exc())
 
-    def _execute_action(self, action):
+    def receive_message(self, message):
         """
-        Execute an action in the world.
+        Receive a message from the outside world.
 
         Args:
-            action: The action to execute
+            message: The message to process
         """
         try:
-            # Extract action components
-            action_type = action.get('type', 'unknown')
-            target = action.get('target', '')
-            parameters = action.get('parameters', {})
+            # Add timestamp if not present
+            if 'timestamp' not in message:
+                message['timestamp'] = time.time()
 
-            # Store in memory
-            self.memory.add_to_working_memory(
-                item={
-                    'type': 'action',
-                    'content': action,
-                    'timestamp': time.time()
-                },
-                importance=0.6  # Actions are important
-            )
+            # Update conversation tracking
+            if message.get('sender', '') == 'human':
+                self.conversation_active = True
+                self.last_conversation_time = time.time()
+
+                # Notify autonomy module of human interaction if available
+                if self.autonomy:
+                    self.autonomy.register_interaction()
+
+            # Track user information
+            sender = message.get('sender', 'unknown')
+            content = message.get('content', '')
+
+            # Check if message contains direct age statement
+            if "my age is" in content.lower():
+                age_match = re.search(r'my age is (\d+)', content.lower())
+                if age_match:
+                    age = age_match.group(1)
+                    self.logger.info(f"Storing explicit age statement: {age}")
+                    self.memory.store_fact(f"user:{sender}", "age", age)
+
+            # Store conversation chunk
+            self.memory.store_conversation_chunk(sender, content)
+
+            # Extract facts
+            self._extract_facts(message)
+
+            # Check if a name is mentioned in the message
+            name_match = re.search(r'my name is (\w+)', content.lower())
+            if name_match:
+                user_name = name_match.group(1).capitalize()
+                self.logger.info(f"Detected user name: {user_name}")
+
+                # Store user info
+                self.memory.store_user_info(sender, user_name)
+            else:
+                # Check if we have a name from previous messages
+                user_info = self.memory.get_user_info(user_id=sender)
+                if not user_info:
+                    # Check if name is mentioned in the message directly
+                    # Common names detection
+                    common_names = ["George", "John", "Mary", "David", "Sarah", "Michael", "Emma", "James",
+                                   "Alice", "Bob", "Peter", "Susan", "Tom", "Linda", "Richard", "Emily"]
+
+                    for name in common_names:
+                        if name.lower() in content.lower():
+                            self.logger.info(f"Detected potential user name in message: {name}")
+                            self.memory.store_user_info(sender, name)
+                            break
+
+            # Add to incoming queue
+            self.incoming_messages.put(message)
+
+            # Debug message flow
+            self.debug_message_flow(message.get('id', 'unknown'))
+
+            # Immediately trigger processing instead of waiting for the loop
+            self._process_incoming_messages()
 
             # Store in episodic memory
-            self.memory.store_episodic_memory({
-                'timestamp': time.time(),
-                'episode_type': 'action',
-                'content': json.dumps(action),
-                'importance': 0.5
-            })
+            try:
+                self.memory.store_episodic_memory({
+                    'timestamp': time.time(),
+                    'episode_type': 'communication',
+                    'content': json.dumps({
+                        'direction': 'incoming',
+                        'message': message
+                    }),
+                    'importance': 0.7  # Incoming messages are important
+                })
+            except Exception as e:
+                self.logger.error(f"Error storing communication in episodic memory: {e}")
 
-            # Execute via actuators
-            self.actuators.execute_action(action_type, target, parameters)
-            self.logger.info(f"Executed action: {action_type} on {target}")
+            # Notify callbacks
+            for callback in self.message_received_callbacks:
+                try:
+                    callback(message)
+                except Exception as e:
+                    self.logger.error(f"Error in message received callback: {e}")
+
+            self.logger.info(f"Received message: {message.get('content', '')[:100]}...")
 
         except Exception as e:
-            self.logger.error(f"Error executing action: {e}")
+            self.logger.error(f"Error receiving message: {e}")
             self.logger.error(traceback.format_exc())
 
+    def register_message_callback(self, callback_type, callback):
+        """
+        Register a callback for message events.
+
+        Args:
+            callback_type: 'received' or 'sent'
+            callback: Callback function to call with the message
+        """
+        if callback_type == 'received':
+            self.message_received_callbacks.append(callback)
+        elif callback_type == 'sent':
+            self.message_sent_callbacks.append(callback)
+        else:
+            self.logger.warning(f"Unknown callback type: {callback_type}")
+
+    def get_internal_monologue(self):
+        """Get the current internal monologue."""
+        return self.internal_monologue
+
+    def get_next_outgoing_message(self, timeout=0.1):
+        """
+        Get the next outgoing message, if any.
+
+        Args:
+            timeout: Timeout for getting message
+
+        Returns:
+            Next outgoing message or None
+        """
+        try:
+            return self.outgoing_messages.get(timeout=timeout)
+        except queue.Empty:
+            return None
+
+    def direct_llm_response(self, message):
+        """
+        Generate a response directly using the LLM without complex processing.
+
+        Args:
+            message: The incoming message
+        """
+        self.logger.info(f"Generating direct LLM response for {message.get('id', 'unknown')}")
+
+        # Create a simple prompt
+        prompt = f"""
+        You are an AI assistant. Please respond helpfully to this message:
+
+        {message.get('content', '')}
+
+        Respond in a friendly, helpful manner.
+        """
+
+        try:
+            # Submit synchronous request to LLM with a timeout
+            result = self.llm_manager.submit_task_sync(
+                model_name=self.consciousness_model,
+                prompt=prompt,
+                max_tokens=512,
+                temperature=0.7,
+                timeout=10.0  # 10 second timeout
+            )
+
+            if result and 'text' in result:
+                # Create response
+                response = {
+                    'id': f"direct_{int(time.time())}",
+                    'in_reply_to': message.get('id', 'unknown'),
+                    'content': result['text'],
+                    'timestamp': time.time(),
+                    'sender': 'agent',
+                    'recipient': message.get('sender', 'unknown'),
+                    'thought': "Direct LLM response due to processing issues"
+                }
+
+                # Send the response
+                self._send_response(response)
+                return True
+
+        except Exception as e:
+            self.logger.error(f"Error in direct LLM response: {e}")
+
+        return False
+
+    def debug_message_flow(self, message_id):
+        """Print the current state of message processing for debugging."""
+        self.logger.info(f"DEBUG MESSAGE FLOW for {message_id}")
+        self.logger.info(f"- Incoming queue size: {self.incoming_messages.qsize()}")
+        self.logger.info(f"- Outgoing queue size: {self.outgoing_messages.qsize()}")
+        self.logger.info(f"- Callbacks registered: received={len(self.message_received_callbacks)}, sent={len(self.message_sent_callbacks)}")
+        self.logger.info(f"- Internal monologue length: {len(self.internal_monologue)}")
+
+        # Check if consciousness model is configured correctly
+        self.logger.info(f"- Using consciousness model: {self.consciousness_model}")
+        if self.consciousness_model not in self.llm_manager.models:
+            self.logger.error(f"Model {self.consciousness_model} not found in LLM manager!")
+        else:
+            self.logger.info(f"- Model {self.consciousness_model} is available")
+
+    def stop(self):
+        """Stop the consciousness module."""
+        self.logger.info("Stopping consciousness module")
+        self.running = False
+
+    def set_autonomy_module(self, autonomy_module):
+        """
+        Set the reference to the autonomy module.
+
+        Args:
+            autonomy_module: AutonomyModule instance
+        """
+        self.autonomy = autonomy_module
+        self.logger.info("Autonomy module reference set")
+
+    # Update in consciousness.py, in the _extract_facts method
+    def _extract_facts(self, message):
+        """Extract important facts from a message."""
+        try:
+            sender = message.get('sender', 'unknown')
+            content = message.get('content', '')
+
+            # Expanded age extraction - catch more patterns
+            age_patterns = [
+                r'I am (\d+)(?:\s+years old)?',
+                r'I\'m (\d+)(?:\s+years old)?',
+                r'my age is (\d+)',
+                r'my age: (\d+)',
+            ]
+
+            for pattern in age_patterns:
+                age_match = re.search(pattern, content, re.IGNORECASE)
+                if age_match:
+                    age = age_match.group(1)
+                    self.logger.info(f"Detected user age: {age}")
+                    self.memory.store_fact(f"user:{sender}", "age", age)
+                    break
+
+            # Basic location extraction
+            location_match = re.search(r'I(?:\'m| am) (?:from|in) ([A-Za-z\s,]+)', content)
+            if location_match:
+                location = location_match.group(1).strip()
+                self.logger.info(f"Detected user location: {location}")
+                self.memory.store_fact(f"user:{sender}", "location", location)
+
+            # Basic preference extraction
+            like_match = re.search(r'I (?:like|love|enjoy) ([A-Za-z\s,]+)', content)
+            if like_match:
+                preference = like_match.group(1).strip()
+                self.logger.info(f"Detected user preference: {preference}")
+                self.memory.store_fact(f"user:{sender}", "likes", preference)
+
+            # Basic dislike extraction
+            dislike_match = re.search(r'I (?:dislike|hate|don\'t like) ([A-Za-z\s,]+)', content)
+            if dislike_match:
+                dislike = dislike_match.group(1).strip()
+                self.logger.info(f"Detected user dislike: {dislike}")
+                self.memory.store_fact(f"user:{sender}", "dislikes", dislike)
+
+        except Exception as e:
+            self.logger.error(f"Error extracting facts: {e}")
+
+    # Additional methods that were already in the file
     def _get_cognition_state(self):
         """Get the current cognitive state from memory."""
         try:
@@ -580,8 +887,6 @@ class ConsciousnessModule:
 
             # Return empty state on error
             return {}
-
-
 
     def _create_response_prompt(self, message, internal_state, recent_perceptions, working_memory, monologue_summary):
         """Create a prompt for generating a response to a message."""
@@ -726,6 +1031,242 @@ class ConsciousnessModule:
 
             # Return simple prompt on error
             return f"Generate a response to this message: {message.get('content', '')}"
+
+    def _summarize_and_store_conversation(self, max_chunks=10):
+        """
+        Summarize recent conversation and store it in long-term memory.
+
+        Args:
+            max_chunks: Maximum number of conversation chunks to summarize
+        """
+        try:
+            # Get recent conversation chunks
+            conversation_chunks = self.memory.get_recent_conversation(limit=max_chunks)
+
+            if not conversation_chunks or len(conversation_chunks) < 3:
+                # Not enough conversation to summarize
+                return
+
+            # Format conversation for the LLM
+            conversation_text = ""
+            for item in conversation_chunks:
+                speaker = "User" if item['speaker'] != 'agent' else "Assistant"
+                conversation_text += f"{speaker}: {item['content']}\n"
+
+            # Create prompt for summarization
+            prompt = f"""
+            Summarize the following conversation in 2-3 sentences, focusing on:
+            1. Key topics discussed
+            2. Important information shared by the user
+            3. Any commitments or actions promised
+
+            Conversation:
+            {conversation_text}
+
+            Summary:
+            """
+
+            # Get summary from LLM
+            self.logger.info("Generating conversation summary")
+            result = self.llm_manager.submit_task_sync(
+                model_name=self.consciousness_model,
+                prompt=prompt,
+                max_tokens=256,
+                temperature=0.5,
+                timeout=10.0
+            )
+
+            if result and 'text' in result:
+                summary = result['text'].strip()
+
+                # Extract user ID
+                user_id = None
+                for item in conversation_chunks:
+                    if item['speaker'] != 'agent':
+                        user_id = item['speaker']
+                        break
+
+                if not user_id:
+                    user_id = "unknown"
+
+                # Generate a timestamp for this conversation
+                timestamp = time.time()
+                conversation_id = f"conv_{int(timestamp)}"
+
+                # Get emotional tone
+                emotion_data = self._extract_emotional_tone(conversation_chunks)
+
+                # Store summary in memory
+                self.logger.info(f"Storing conversation summary: {summary[:100]}...")
+
+                # Create a memory entry with emotion data
+                memory_content = {
+                    'user_id': user_id,
+                    'conversation_id': conversation_id,
+                    'summary': summary,
+                    'timestamp': timestamp
+                }
+
+                # Add emotion data if available
+                if emotion_data:
+                    memory_content['emotion'] = emotion_data
+
+                # Use the existing episodic memory system
+                self.memory.store_episodic_memory({
+                    'timestamp': timestamp,
+                    'episode_type': 'conversation_summary',
+                    'content': json.dumps(memory_content),
+                    'importance': 0.8  # High importance for conversation summaries
+                })
+
+                # If the user_id is known, also store as a user fact
+                if user_id != "unknown":
+                    # Get user info
+                    user_info = self.memory.get_user_info(user_id=user_id)
+                    if user_info:
+                        user_name = user_info.get('name', 'unknown')
+
+                        # Store formatted summary as a conversation fact
+                        fact_value = f"Talked about: {summary}"
+
+                        # Add emotion if available
+                        if emotion_data:
+                            tone = emotion_data.get('overall_tone', '')
+                            if tone:
+                                fact_value += f" (Tone: {tone})"
+
+                        # Store fact
+                        self.memory.store_fact(
+                            entity=f"user:{user_id}",
+                            attribute=f"conversation_{int(timestamp)}",
+                            value=fact_value
+                        )
+
+                        self.logger.info(f"Stored summary as fact for user {user_name}")
+
+                return summary
+
+            return None
+
+        except Exception as e:
+            self.logger.error(f"Error summarizing conversation: {e}")
+            self.logger.error(traceback.format_exc())
+            return None
+
+
+    def _extract_emotional_tone(self, conversation_chunks):
+        """
+        Extract the emotional tone of a conversation.
+
+        Args:
+            conversation_chunks: List of conversation chunks
+
+        Returns:
+            Dict with emotional tone assessment
+        """
+        try:
+            if not conversation_chunks or len(conversation_chunks) < 2:
+                return None
+
+            # Format conversation for the LLM
+            conversation_text = ""
+            for item in conversation_chunks:
+                speaker = "User" if item['speaker'] != 'agent' else "Assistant"
+                conversation_text += f"{speaker}: {item['content']}\n"
+
+            # Create prompt for emotion analysis
+            prompt = f"""
+            Analyze the emotional tone of the following conversation:
+
+            {conversation_text}
+
+            For each participant (User and Assistant), identify:
+            1. The primary emotion (e.g., happy, curious, frustrated, neutral)
+            2. The intensity of that emotion (low, medium, high)
+            3. Any shifts in emotion during the conversation
+
+            Provide your analysis in JSON format with these keys:
+            - "user_emotion": Primary emotion of the user
+            - "user_intensity": Intensity of user's emotion
+            - "assistant_emotion": Primary emotion of the assistant
+            - "assistant_intensity": Intensity of assistant's emotion
+            - "overall_tone": Overall tone of the conversation (e.g., positive, neutral, negative)
+            """
+
+            # Get analysis from LLM
+            self.logger.info("Analyzing emotional tone of conversation")
+            result = self.llm_manager.submit_task_sync(
+                model_name=self.consciousness_model,
+                prompt=prompt,
+                max_tokens=256,
+                temperature=0.4,
+                timeout=10.0
+            )
+
+            if result and 'text' in result:
+                # Try to parse JSON
+                try:
+                    # Find JSON in text
+                    text = result['text']
+                    start_idx = text.find('{')
+                    end_idx = text.rfind('}')
+
+                    if start_idx >= 0 and end_idx > start_idx:
+                        json_str = text[start_idx:end_idx+1]
+                        emotion_data = json.loads(json_str)
+                        return emotion_data
+                except:
+                    # If JSON parsing fails, return None
+                    self.logger.error("Failed to parse emotional tone as JSON")
+                    return None
+
+            return None
+
+        except Exception as e:
+            self.logger.error(f"Error extracting emotional tone: {e}")
+            self.logger.error(traceback.format_exc())
+            return None
+
+
+    def _identify_conversation_topics(self, message_content):
+        """
+        Identify the topics in a message for better memory retrieval.
+
+        Args:
+            message_content: The message content to analyze
+
+        Returns:
+            List of key topics
+        """
+        try:
+            # Create prompt for topic extraction
+            prompt = f"""
+            Extract 2-3 key topics from this message:
+
+            "{message_content}"
+
+            Provide only the topics, separated by commas, with no additional text.
+            """
+
+            # Get topics from LLM
+            result = self.llm_manager.submit_task_sync(
+                model_name=self.consciousness_model,
+                prompt=prompt,
+                max_tokens=64,
+                temperature=0.3,
+                timeout=5.0
+            )
+
+            if result and 'text' in result:
+                # Extract topics
+                topics = [topic.strip() for topic in result['text'].split(',')]
+                return topics
+
+            return []
+
+        except Exception as e:
+            self.logger.error(f"Error identifying conversation topics: {e}")
+            return []
 
 
     def _parse_response_output(self, text, original_message):
@@ -979,482 +1520,42 @@ Provide the action details in JSON format with these keys:
             self.logger.error(traceback.format_exc())
             return None
 
-
-
-    def receive_message(self, message):
+    def _execute_action(self, action):
         """
-        Receive a message from the outside world.
+        Execute an action in the world.
 
         Args:
-            message: The message to process
+            action: The action to execute
         """
         try:
-            # Add timestamp if not present
-            if 'timestamp' not in message:
-                message['timestamp'] = time.time()
+            # Extract action components
+            action_type = action.get('type', 'unknown')
+            target = action.get('target', '')
+            parameters = action.get('parameters', {})
 
-            # Track user information
-            sender = message.get('sender', 'unknown')
-            content = message.get('content', '')
-
-            # Check if message contains direct age statement
-            if "my age is" in content.lower():
-                age_match = re.search(r'my age is (\d+)', content.lower())
-                if age_match:
-                    age = age_match.group(1)
-                    self.logger.info(f"Storing explicit age statement: {age}")
-                    self.memory.store_fact(f"user:{sender}", "age", age)
-
-            # Store conversation chunk
-            self.memory.store_conversation_chunk(sender, content)
-
-            # Extract facts
-            self._extract_facts(message)
-
-            # Check if a name is mentioned in the message
-            name_match = re.search(r'my name is (\w+)', content.lower())
-            if name_match:
-                user_name = name_match.group(1).capitalize()
-                self.logger.info(f"Detected user name: {user_name}")
-
-                # Store user info
-                self.memory.store_user_info(sender, user_name)
-            else:
-                # Check if we have a name from previous messages
-                user_info = self.memory.get_user_info(user_id=sender)
-                if not user_info:
-                    # Check if name is mentioned in the message directly
-                    # Common names detection
-                    common_names = ["George", "John", "Mary", "David", "Sarah", "Michael", "Emma", "James",
-                                   "Alice", "Bob", "Peter", "Susan", "Tom", "Linda", "Richard", "Emily"]
-
-                    for name in common_names:
-                        if name.lower() in content.lower():
-                            self.logger.info(f"Detected potential user name in message: {name}")
-                            self.memory.store_user_info(sender, name)
-                            break
-
-            # Add to incoming queue
-            self.incoming_messages.put(message)
-
-            # Debug message flow
-            self.debug_message_flow(message.get('id', 'unknown'))
-
-            # Immediately trigger processing instead of waiting for the loop
-            self._process_incoming_messages()
+            # Store in memory
+            self.memory.add_to_working_memory(
+                item={
+                    'type': 'action',
+                    'content': action,
+                    'timestamp': time.time()
+                },
+                importance=0.6  # Actions are important
+            )
 
             # Store in episodic memory
-            try:
-                self.memory.store_episodic_memory({
-                    'timestamp': time.time(),
-                    'episode_type': 'communication',
-                    'content': json.dumps({
-                        'direction': 'incoming',
-                        'message': message
-                    }),
-                    'importance': 0.7  # Incoming messages are important
-                })
-            except Exception as e:
-                self.logger.error(f"Error storing communication in episodic memory: {e}")
+            self.memory.store_episodic_memory({
+                'timestamp': time.time(),
+                'episode_type': 'action',
+                'content': json.dumps(action),
+                'importance': 0.5
+            })
 
-            # Notify callbacks
-            for callback in self.message_received_callbacks:
-                try:
-                    callback(message)
-                except Exception as e:
-                    self.logger.error(f"Error in message received callback: {e}")
-
-            self.logger.info(f"Received message: {message.get('content', '')[:100]}...")
+            # Execute via actuators
+            self.actuators.execute_action(action_type, target, parameters)
+            self.logger.info(f"Executed action: {action_type} on {target}")
 
         except Exception as e:
-            self.logger.error(f"Error receiving message: {e}")
+            self.logger.error(f"Error executing action: {e}")
             self.logger.error(traceback.format_exc())
 
-    def register_message_callback(self, callback_type, callback):
-        """
-        Register a callback for message events.
-
-        Args:
-            callback_type: 'received' or 'sent'
-            callback: Callback function to call with the message
-        """
-        if callback_type == 'received':
-            self.message_received_callbacks.append(callback)
-        elif callback_type == 'sent':
-            self.message_sent_callbacks.append(callback)
-        else:
-            self.logger.warning(f"Unknown callback type: {callback_type}")
-
-    def get_internal_monologue(self):
-        """Get the current internal monologue."""
-        return self.internal_monologue
-
-    def get_next_outgoing_message(self, timeout=0.1):
-        """
-        Get the next outgoing message, if any.
-
-        Args:
-            timeout: Timeout for getting message
-
-        Returns:
-            Next outgoing message or None
-        """
-        try:
-            return self.outgoing_messages.get(timeout=timeout)
-        except queue.Empty:
-            return None
-
-
-    def direct_llm_response(self, message):
-        """
-        Generate a response directly using the LLM without complex processing.
-
-        Args:
-            message: The incoming message
-        """
-        self.logger.info(f"Generating direct LLM response for {message.get('id', 'unknown')}")
-
-        # Create a simple prompt
-        prompt = f"""
-        You are an AI assistant. Please respond helpfully to this message:
-
-        {message.get('content', '')}
-
-        Respond in a friendly, helpful manner.
-        """
-
-        try:
-            # Submit synchronous request to LLM with a timeout
-            result = self.llm_manager.submit_task_sync(
-                model_name=self.consciousness_model,
-                prompt=prompt,
-                max_tokens=512,
-                temperature=0.7,
-                timeout=10.0  # 10 second timeout
-            )
-
-            if result and 'text' in result:
-                # Create response
-                response = {
-                    'id': f"direct_{int(time.time())}",
-                    'in_reply_to': message.get('id', 'unknown'),
-                    'content': result['text'],
-                    'timestamp': time.time(),
-                    'sender': 'agent',
-                    'recipient': message.get('sender', 'unknown'),
-                    'thought': "Direct LLM response due to processing issues"
-                }
-
-                # Send the response
-                self._send_response(response)
-                return True
-
-        except Exception as e:
-            self.logger.error(f"Error in direct LLM response: {e}")
-
-        return False
-
-    def debug_message_flow(self, message_id):
-        """Print the current state of message processing for debugging."""
-        self.logger.info(f"DEBUG MESSAGE FLOW for {message_id}")
-        self.logger.info(f"- Incoming queue size: {self.incoming_messages.qsize()}")
-        self.logger.info(f"- Outgoing queue size: {self.outgoing_messages.qsize()}")
-        self.logger.info(f"- Callbacks registered: received={len(self.message_received_callbacks)}, sent={len(self.message_sent_callbacks)}")
-        self.logger.info(f"- Internal monologue length: {len(self.internal_monologue)}")
-
-        # Check if consciousness model is configured correctly
-        self.logger.info(f"- Using consciousness model: {self.consciousness_model}")
-        if self.consciousness_model not in self.llm_manager.models:
-            self.logger.error(f"Model {self.consciousness_model} not found in LLM manager!")
-        else:
-            self.logger.info(f"- Model {self.consciousness_model} is available")
-
-    def stop(self):
-        """Stop the consciousness module."""
-        self.logger.info("Stopping consciousness module")
-        self.running = False
-
-
-    # Update in consciousness.py, in the _extract_facts method
-    def _extract_facts(self, message):
-        """Extract important facts from a message."""
-        try:
-            sender = message.get('sender', 'unknown')
-            content = message.get('content', '')
-
-            # Expanded age extraction - catch more patterns
-            age_patterns = [
-                r'I am (\d+)(?:\s+years old)?',
-                r'I\'m (\d+)(?:\s+years old)?',
-                r'my age is (\d+)',
-                r'my age: (\d+)',
-            ]
-
-            for pattern in age_patterns:
-                age_match = re.search(pattern, content, re.IGNORECASE)
-                if age_match:
-                    age = age_match.group(1)
-                    self.logger.info(f"Detected user age: {age}")
-                    self.memory.store_fact(f"user:{sender}", "age", age)
-                    break
-
-            # Basic location extraction
-            location_match = re.search(r'I(?:\'m| am) (?:from|in) ([A-Za-z\s,]+)', content)
-            if location_match:
-                location = location_match.group(1).strip()
-                self.logger.info(f"Detected user location: {location}")
-                self.memory.store_fact(f"user:{sender}", "location", location)
-
-            # Basic preference extraction
-            like_match = re.search(r'I (?:like|love|enjoy) ([A-Za-z\s,]+)', content)
-            if like_match:
-                preference = like_match.group(1).strip()
-                self.logger.info(f"Detected user preference: {preference}")
-                self.memory.store_fact(f"user:{sender}", "likes", preference)
-
-            # Basic dislike extraction
-            dislike_match = re.search(r'I (?:dislike|hate|don\'t like) ([A-Za-z\s,]+)', content)
-            if dislike_match:
-                dislike = dislike_match.group(1).strip()
-                self.logger.info(f"Detected user dislike: {dislike}")
-                self.memory.store_fact(f"user:{sender}", "dislikes", dislike)
-
-        except Exception as e:
-            self.logger.error(f"Error extracting facts: {e}")
-
-
-    def _summarize_and_store_conversation(self, max_chunks=10):
-        """
-        Summarize recent conversation and store it in long-term memory.
-
-        Args:
-            max_chunks: Maximum number of conversation chunks to summarize
-        """
-        try:
-            # Get recent conversation chunks
-            conversation_chunks = self.memory.get_recent_conversation(limit=max_chunks)
-
-            if not conversation_chunks or len(conversation_chunks) < 3:
-                # Not enough conversation to summarize
-                return
-
-            # Format conversation for the LLM
-            conversation_text = ""
-            for item in conversation_chunks:
-                speaker = "User" if item['speaker'] != 'agent' else "Assistant"
-                conversation_text += f"{speaker}: {item['content']}\n"
-
-            # Create prompt for summarization
-            prompt = f"""
-            Summarize the following conversation in 2-3 sentences, focusing on:
-            1. Key topics discussed
-            2. Important information shared by the user
-            3. Any commitments or actions promised
-
-            Conversation:
-            {conversation_text}
-
-            Summary:
-            """
-
-            # Get summary from LLM
-            self.logger.info("Generating conversation summary")
-            result = self.llm_manager.submit_task_sync(
-                model_name=self.consciousness_model,
-                prompt=prompt,
-                max_tokens=256,
-                temperature=0.5,
-                timeout=10.0
-            )
-
-            if result and 'text' in result:
-                summary = result['text'].strip()
-
-                # Extract user ID
-                user_id = None
-                for item in conversation_chunks:
-                    if item['speaker'] != 'agent':
-                        user_id = item['speaker']
-                        break
-
-                if not user_id:
-                    user_id = "unknown"
-
-                # Generate a timestamp for this conversation
-                timestamp = time.time()
-                conversation_id = f"conv_{int(timestamp)}"
-
-                # Get emotional tone
-                emotion_data = self._extract_emotional_tone(conversation_chunks)
-
-                # Store summary in memory
-                self.logger.info(f"Storing conversation summary: {summary[:100]}...")
-
-                # Create a memory entry with emotion data
-                memory_content = {
-                    'user_id': user_id,
-                    'conversation_id': conversation_id,
-                    'summary': summary,
-                    'timestamp': timestamp
-                }
-
-                # Add emotion data if available
-                if emotion_data:
-                    memory_content['emotion'] = emotion_data
-
-                # Use the existing episodic memory system
-                self.memory.store_episodic_memory({
-                    'timestamp': timestamp,
-                    'episode_type': 'conversation_summary',
-                    'content': json.dumps(memory_content),
-                    'importance': 0.8  # High importance for conversation summaries
-                })
-
-                # If the user_id is known, also store as a user fact
-                if user_id != "unknown":
-                    # Get user info
-                    user_info = self.memory.get_user_info(user_id=user_id)
-                    if user_info:
-                        user_name = user_info.get('name', 'unknown')
-
-                        # Store formatted summary as a conversation fact
-                        fact_value = f"Talked about: {summary}"
-
-                        # Add emotion if available
-                        if emotion_data:
-                            tone = emotion_data.get('overall_tone', '')
-                            if tone:
-                                fact_value += f" (Tone: {tone})"
-
-                        # Store fact
-                        self.memory.store_fact(
-                            entity=f"user:{user_id}",
-                            attribute=f"conversation_{int(timestamp)}",
-                            value=fact_value
-                        )
-
-                        self.logger.info(f"Stored summary as fact for user {user_name}")
-
-                return summary
-
-            return None
-
-        except Exception as e:
-            self.logger.error(f"Error summarizing conversation: {e}")
-            self.logger.error(traceback.format_exc())
-            return None
-
-
-    def _extract_emotional_tone(self, conversation_chunks):
-        """
-        Extract the emotional tone of a conversation.
-
-        Args:
-            conversation_chunks: List of conversation chunks
-
-        Returns:
-            Dict with emotional tone assessment
-        """
-        try:
-            if not conversation_chunks or len(conversation_chunks) < 2:
-                return None
-
-            # Format conversation for the LLM
-            conversation_text = ""
-            for item in conversation_chunks:
-                speaker = "User" if item['speaker'] != 'agent' else "Assistant"
-                conversation_text += f"{speaker}: {item['content']}\n"
-
-            # Create prompt for emotion analysis
-            prompt = f"""
-            Analyze the emotional tone of the following conversation:
-
-            {conversation_text}
-
-            For each participant (User and Assistant), identify:
-            1. The primary emotion (e.g., happy, curious, frustrated, neutral)
-            2. The intensity of that emotion (low, medium, high)
-            3. Any shifts in emotion during the conversation
-
-            Provide your analysis in JSON format with these keys:
-            - "user_emotion": Primary emotion of the user
-            - "user_intensity": Intensity of user's emotion
-            - "assistant_emotion": Primary emotion of the assistant
-            - "assistant_intensity": Intensity of assistant's emotion
-            - "overall_tone": Overall tone of the conversation (e.g., positive, neutral, negative)
-            """
-
-            # Get analysis from LLM
-            self.logger.info("Analyzing emotional tone of conversation")
-            result = self.llm_manager.submit_task_sync(
-                model_name=self.consciousness_model,
-                prompt=prompt,
-                max_tokens=256,
-                temperature=0.4,
-                timeout=10.0
-            )
-
-            if result and 'text' in result:
-                # Try to parse JSON
-                try:
-                    # Find JSON in text
-                    text = result['text']
-                    start_idx = text.find('{')
-                    end_idx = text.rfind('}')
-
-                    if start_idx >= 0 and end_idx > start_idx:
-                        json_str = text[start_idx:end_idx+1]
-                        emotion_data = json.loads(json_str)
-                        return emotion_data
-                except:
-                    # If JSON parsing fails, return None
-                    self.logger.error("Failed to parse emotional tone as JSON")
-                    return None
-
-            return None
-
-        except Exception as e:
-            self.logger.error(f"Error extracting emotional tone: {e}")
-            self.logger.error(traceback.format_exc())
-            return None
-
-
-    def _identify_conversation_topics(self, message_content):
-        """
-        Identify the topics in a message for better memory retrieval.
-
-        Args:
-            message_content: The message content to analyze
-
-        Returns:
-            List of key topics
-        """
-        try:
-            # Create prompt for topic extraction
-            prompt = f"""
-            Extract 2-3 key topics from this message:
-
-            "{message_content}"
-
-            Provide only the topics, separated by commas, with no additional text.
-            """
-
-            # Get topics from LLM
-            result = self.llm_manager.submit_task_sync(
-                model_name=self.consciousness_model,
-                prompt=prompt,
-                max_tokens=64,
-                temperature=0.3,
-                timeout=5.0
-            )
-
-            if result and 'text' in result:
-                # Extract topics
-                topics = [topic.strip() for topic in result['text'].split(',')]
-                return topics
-
-            return []
-
-        except Exception as e:
-            self.logger.error(f"Error identifying conversation topics: {e}")
-            return []

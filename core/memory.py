@@ -46,8 +46,15 @@ class MemoryManager:
         self.perception_capacity = config.get('perception_capacity', 100)
         self.working_memory_capacity = config.get('working_memory_capacity', 20)
 
-        # Initialize working memory
+        # Initialize working memory and perception memory
         self.working_memory = []
+        self.perception_memory = []
+
+        # Initialize memory queue for background processing
+        self.memory_queue = queue.Queue()
+
+        # Memory worker thread
+        self.memory_worker_thread = None
 
         # Flag for running state
         self.running = False
@@ -62,6 +69,15 @@ class MemoryManager:
             return
 
         self.running = True
+
+        # Start memory worker thread
+        self.memory_worker_thread = threading.Thread(
+            target=self._memory_worker,
+            name="memory_worker_thread",
+            daemon=True
+        )
+        self.memory_worker_thread.start()
+
         self.logger.info("Memory manager started")
 
     def stop(self):
@@ -70,6 +86,13 @@ class MemoryManager:
             return
 
         self.running = False
+
+        # Wait for memory worker to finish
+        if self.memory_worker_thread and self.memory_worker_thread.is_alive():
+            try:
+                self.memory_worker_thread.join(timeout=2.0)
+            except Exception as e:
+                self.logger.error(f"Error stopping memory worker thread: {e}")
 
         # Close all database connections
         if hasattr(self._local, 'conn') and self._local.conn:
@@ -80,87 +103,6 @@ class MemoryManager:
                 self.logger.error(f"Error closing memory database connection: {e}")
 
         self.logger.info("Memory manager stopped")
-
-    def initialize_database(self):
-        """Initialize the SQLite database schema."""
-        try:
-            conn = sqlite3.connect(str(self.db_path))
-            cursor = conn.cursor()
-
-            # Episodic memory table
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS episodic_memory (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp REAL NOT NULL,
-                episode_type TEXT NOT NULL,
-                content TEXT NOT NULL,
-                importance REAL DEFAULT 0.5,
-                last_accessed REAL,
-                access_count INTEGER DEFAULT 0,
-                created_at REAL NOT NULL
-            )
-            ''')
-
-            # Semantic memory table
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS semantic_memory (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                concept TEXT NOT NULL,
-                content TEXT NOT NULL,
-                confidence REAL DEFAULT 0.5,
-                last_updated REAL NOT NULL,
-                created_at REAL NOT NULL
-            )
-            ''')
-
-            # Create indexes
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_episodic_timestamp ON episodic_memory(timestamp)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_episodic_type ON episodic_memory(episode_type)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_episodic_importance ON episodic_memory(importance)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_semantic_concept ON semantic_memory(concept)')
-
-            conn.commit()
-            conn.close()
-
-            self.logger.info("Memory database initialized")
-
-        except Exception as e:
-            self.logger.error(f"Error initializing memory database: {e}")
-            raise
-
-
-
-    def _memory_worker(self):
-        """Worker thread for processing memory operations."""
-        while self.running:
-            try:
-                # Get operation from queue
-                try:
-                    operation = self.memory_queue.get(timeout=0.5)
-                except queue.Empty:
-                    continue
-
-                # Process operation
-                try:
-                    op_type = operation.get('type')
-                    if op_type == 'store_episodic':
-                        self._store_episodic_memory(operation.get('data', {}))
-                    elif op_type == 'store_semantic':
-                        self._store_semantic_memory(operation.get('data', {}))
-                    elif op_type == 'consolidate':
-                        self._consolidate_memories()
-                    else:
-                        self.logger.warning(f"Unknown memory operation: {op_type}")
-
-                except Exception as e:
-                    self.logger.error(f"Error processing memory operation: {e}")
-
-                finally:
-                    self.memory_queue.task_done()
-
-            except Exception as e:
-                self.logger.error(f"Error in memory worker: {e}")
-                time.sleep(0.5)  # Prevent thrashing on error
 
     def add_perception(self, perception: Dict[str, Any]):
         """
@@ -233,8 +175,6 @@ class MemoryManager:
         """
         return self.working_memory
 
-
-
     def get_recent_perceptions(self, limit=5):
         """Get the most recent perceptions from memory."""
         try:
@@ -305,40 +245,13 @@ class MemoryManager:
         matching = [p for p in self.perception_memory if p.get('type') == perception_type]
         return matching[-limit:]
 
-
     def store_episodic_memory(self, memory_data):
         """Store an episodic memory."""
-        try:
-            conn = self._get_connection()
-            if not conn:
-                self.logger.error("No database connection available")
-                return
-
-            cursor = conn.cursor()
-
-            # Extract fields
-            timestamp = memory_data.get('timestamp', time.time())
-            episode_type = memory_data.get('episode_type', 'general')
-            content = memory_data.get('content', '')
-
-            # Convert content to string if it's a dict or other object
-            if not isinstance(content, str):
-                content = json.dumps(content)
-
-            importance = float(memory_data.get('importance', 0.5))
-
-            # Insert into database
-            cursor.execute("""
-                INSERT INTO episodic_memories
-                (timestamp, episode_type, content, importance)
-                VALUES (?, ?, ?, ?)
-            """, (timestamp, episode_type, content, importance))
-
-            conn.commit()
-            self.logger.debug(f"Stored episodic memory of type {episode_type}")
-
-        except Exception as e:
-            self.logger.error(f"Error storing episodic memory: {e}")
+        # Use the memory queue to handle this asynchronously
+        self.memory_queue.put({
+            'type': 'store_episodic',
+            'data': memory_data
+        })
 
     def _store_episodic_memory(self, episode: Dict[str, Any]):
         """Internal method to store episodic memory in database."""
@@ -368,7 +281,6 @@ class MemoryManager:
         except Exception as e:
             self.logger.error(f"Error storing episodic memory: {e}")
 
-    # Update in memory.py
     def retrieve_episodic_memories(self, query=None, min_importance=0.0, limit=10):
         """Retrieve episodic memories based on criteria."""
         try:
@@ -662,7 +574,6 @@ class MemoryManager:
         except Exception as e:
             self.logger.error(f"Error initializing database tables: {e}")
 
-
     def store_perception(self, sensor_type, sensor_name, data, interpretation=""):
         """
         Store a perception in memory.
@@ -739,7 +650,6 @@ class MemoryManager:
         except Exception as e:
             self.logger.error(f"Error trimming perceptions: {e}")
 
-
     def get_memories_about(self, entity, limit=5):
         """
         Get memories related to a specific entity (e.g., person, object).
@@ -790,7 +700,6 @@ class MemoryManager:
             self.logger.error(f"Error getting memories about {entity}: {e}")
             return []
 
-    # Add to memory.py
     def store_user_info(self, user_id, user_name, metadata=None):
         """
         Store information about a user.
@@ -908,7 +817,6 @@ class MemoryManager:
             self.logger.error(f"Error getting user info: {e}")
             return None
 
-
     def update_perception(self, perception_id, interpretation=None):
         """
         Update a perception with interpretation.
@@ -942,7 +850,6 @@ class MemoryManager:
         except Exception as e:
             self.logger.error(f"Error updating perception: {e}")
             return False
-
 
     def store_conversation_chunk(self, speaker, content, importance=0.6):
         """
@@ -1044,7 +951,6 @@ class MemoryManager:
             self.logger.error(f"Error getting recent conversation: {e}")
             return []
 
-    # Add to memory.py
     def store_fact(self, entity, attribute, value, source="conversation"):
         """
         Store a fact about an entity.
@@ -1179,7 +1085,6 @@ class MemoryManager:
             self.logger.error(f"Error getting facts: {e}")
             return []
 
-
     def get_last_summary_time(self):
         """
         Get the timestamp of the last conversation summary.
@@ -1214,8 +1119,6 @@ class MemoryManager:
         except Exception as e:
             self.logger.error(f"Error getting last summary time: {e}")
             return None
-
-
 
     def get_conversation_summaries(self, user_id=None, limit=5):
         """
@@ -1276,7 +1179,6 @@ class MemoryManager:
         except Exception as e:
             self.logger.error(f"Error getting conversation summaries: {e}")
             return []
-
 
     def get_related_memories(self, query, limit=5):
         """
@@ -1397,7 +1299,6 @@ class MemoryManager:
             self.logger.error(f"Error getting related memories: {e}")
             return []
 
-
     def decay_memories(self, threshold_days=30):
         """
         Apply memory decay to old, low-importance memories.
@@ -1451,3 +1352,35 @@ class MemoryManager:
         except Exception as e:
             self.logger.error(f"Error decaying memories: {e}")
             return 0
+
+    def _memory_worker(self):
+        """Worker thread for processing memory operations."""
+        while self.running:
+            try:
+                # Get operation from queue
+                try:
+                    operation = self.memory_queue.get(timeout=0.5)
+                except queue.Empty:
+                    continue
+
+                # Process operation
+                try:
+                    op_type = operation.get('type')
+                    if op_type == 'store_episodic':
+                        self._store_episodic_memory(operation.get('data', {}))
+                    elif op_type == 'store_semantic':
+                        self._store_semantic_memory(operation.get('data', {}))
+                    elif op_type == 'consolidate':
+                        self._consolidate_memories()
+                    else:
+                        self.logger.warning(f"Unknown memory operation: {op_type}")
+
+                except Exception as e:
+                    self.logger.error(f"Error processing memory operation: {e}")
+
+                finally:
+                    self.memory_queue.task_done()
+
+            except Exception as e:
+                self.logger.error(f"Error in memory worker: {e}")
+                time.sleep(0.5)  # Prevent thrashing on error

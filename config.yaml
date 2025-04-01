@@ -126,7 +126,7 @@ llm:
     # Perception models
     vision_interpreter:
       type: ollama
-      model_id: llama3:latest
+      model_id: llama3.2-vision:latest
       api_base: http://localhost:11434/api
 
     audio_interpreter:

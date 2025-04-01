@@ -436,48 +436,44 @@ class AutonomyModule:
             if start_idx >= 0 and end_idx > start_idx:
                 json_str = text[start_idx:end_idx+1]
 
-                # Try to fix common JSON formatting issues
-                # 1. Fix missing commas after values before next key
-                json_str = re.sub(r'(\d+|\btrue\b|\bfalse\b|\bnull\b|"[^"]*")\s*\n\s*"', r'\1,\n"', json_str)
-                # 2. Fix trailing commas before closing brackets
-                json_str = re.sub(r',\s*}', r'}', json_str)
-                # 3. Fix missing quotes around keys
-                json_str = re.sub(r'([{,])\s*(\w+):', r'\1"\2":', json_str)
+                # Log the raw JSON string for debugging
+                self.logger.debug(f"Raw JSON string before processing: {json_str[:200]}...")
+
+                # Apply aggressive JSON cleanup
+                cleaned_json = self._aggressively_clean_json(json_str)
 
                 try:
-                    thought = json.loads(json_str)
+                    thought = json.loads(cleaned_json)
 
                     # Add timestamp and thinking mode
                     thought['timestamp'] = time.time()
                     thought['thinking_mode'] = self.current_thinking_mode
 
                     return thought
+
                 except json.JSONDecodeError as e:
-                    # Still failed to parse, log detailed error
+                    # Log detailed error
                     self.logger.error(f"JSON parse error in thought output: {str(e)}")
-                    self.logger.debug(f"Attempted to parse: {json_str}")
+                    self.logger.debug(f"After cleaning: {cleaned_json[:200]}...")
 
-                    # Try a more lenient parsing approach - extract key parts
-                    content_match = re.search(r'"content"\s*:\s*"([^"]+)"', json_str)
-                    elaboration_match = re.search(r'"elaboration"\s*:\s*"([^"]+)"', json_str)
+                    # Fall back to a simpler approach - just extract content
+                    content = self._extract_content_from_text(text)
 
-                    if content_match:
-                        # Build a simplified thought dictionary
-                        simple_thought = {
-                            'content': content_match.group(1),
-                            'elaboration': elaboration_match.group(1) if elaboration_match else "",
-                            'timestamp': time.time(),
-                            'thinking_mode': self.current_thinking_mode,
-                            'topics': [],
-                            'questions': [],
-                            'importance': 0.5,
-                            'parse_error': str(e)
-                        }
-                        return simple_thought
+                    return {
+                        'content': content,
+                        'timestamp': time.time(),
+                        'thinking_mode': self.current_thinking_mode,
+                        'topics': [],
+                        'questions': [],
+                        'importance': 0.5,
+                        'parse_error': str(e)
+                    }
 
-            # If no JSON found or couldn't extract key parts, just wrap the text
+            # If no JSON structure found, just extract content
+            content = self._extract_content_from_text(text)
+
             return {
-                'content': text.strip(),
+                'content': content,
                 'timestamp': time.time(),
                 'thinking_mode': self.current_thinking_mode,
                 'topics': [],
@@ -487,13 +483,106 @@ class AutonomyModule:
 
         except Exception as e:
             self.logger.error(f"Error processing thought output: {e}")
+
             # Return a simplified version on error
             return {
-                'content': text.strip(),
+                'content': text.strip()[:200] + "..." if len(text) > 200 else text.strip(),
                 'timestamp': time.time(),
                 'thinking_mode': self.current_thinking_mode,
                 'error': str(e)
             }
+
+    def _aggressively_clean_json(self, json_str):
+        """Very aggressively clean malformed JSON."""
+        try:
+            # Save original for comparison
+            original = json_str
+
+            # 1. Fix unquoted property names (most common issue)
+            # This is a more aggressive pattern that should catch most unquoted keys
+            json_str = re.sub(r'([{,])\s*([a-zA-Z0-9_]+)\s*:', r'\1"\2":', json_str)
+
+            # 2. Fix trailing commas
+            json_str = re.sub(r',\s*}', r'}', json_str)
+            json_str = re.sub(r',\s*]', r']', json_str)
+
+            # 3. Fix missing commas between elements
+            json_str = re.sub(r'"\s*{', r'",{', json_str)
+            json_str = re.sub(r'"\s*\[', r'",\[', json_str)
+            json_str = re.sub(r'}\s*"', r'},\"', json_str)
+            json_str = re.sub(r']\s*"', r'],\"', json_str)
+            json_str = re.sub(r'}\s*{', r'},{', json_str)
+            json_str = re.sub(r'}\s*\[', r'},\[', json_str)
+            json_str = re.sub(r']\s*{', r'],{', json_str)
+            json_str = re.sub(r']\s*\[', r'],\[', json_str)
+
+            # 4. Fix newlines in strings
+            json_str = re.sub(r'"\s*\n\s*([^"]*)', r'"\1', json_str)
+
+            # 5. Replace single quotes with double quotes (but not inside strings)
+            # First handle single-quoted keys
+            json_str = re.sub(r"'([a-zA-Z0-9_]+)':", r'"\1":', json_str)
+
+            # Then handle single-quoted values - this is trickier
+            # We'll do a simple approach - just replace when preceded by :
+            json_str = re.sub(r":\s*'([^']*)'", r':"\1"', json_str)
+
+            # 6. Fix values that are unquoted strings
+            # This is challenging because we need to distinguish between unquoted strings
+            # and valid JSON literals (true, false, null, numbers)
+            # For now, we'll just focus on common issues
+
+            # Check if the cleaning made any difference
+            if original == json_str:
+                self.logger.debug("JSON cleaning made no changes")
+            else:
+                self.logger.debug("JSON was cleaned")
+
+            return json_str
+
+        except Exception as e:
+            self.logger.error(f"Error cleaning JSON: {e}")
+            return json_str  # Return original on error
+
+    def _extract_content_from_text(self, text):
+        """Extract meaningful content from text when JSON parsing fails."""
+        try:
+            # Look for specific patterns in the text that might indicate content
+            content_patterns = [
+                # Look for content in JSON format
+                r'"content"\s*:\s*"([^"]+)"',
+                r'"content"\s*:\s*\'([^\']+)\'',
+                r'"content"\s*:\s*([^,"{}]+)',
+                r'content\s*:\s*"([^"]+)"',
+                r'content\s*:\s*\'([^\']+)\'',
+                r'content\s*:\s*([^,"{}]+)',
+
+                # Look for a thoughtful sentence
+                r'I\s+([^.!?]+[.!?])',
+                r'The\s+([^.!?]+[.!?])',
+
+                # If all else fails, just take the first sentence
+                r'([A-Z][^.!?]+[.!?])'
+            ]
+
+            for pattern in content_patterns:
+                match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+                if match:
+                    content = match.group(1).strip()
+                    # Clean up the content
+                    content = re.sub(r'\s+', ' ', content)
+                    if len(content) > 200:
+                        content = content[:197] + "..."
+                    return content
+
+            # If no patterns match, take a portion of the text
+            if len(text) > 200:
+                return text.strip()[:197] + "..."
+            return text.strip()
+
+        except Exception as e:
+            self.logger.error(f"Error extracting content: {e}")
+            return "Error extracting thought content"
 
     def _select_topic_of_interest(self):
         """Select a topic of interest to focus on based on curiosity scores."""
@@ -535,6 +624,37 @@ class AutonomyModule:
 
         return topic
 
+    def _extract_content_from_malformed_json(self, json_str):
+        """Extract content from malformed JSON using regex patterns."""
+        try:
+            # Try different regex patterns to extract content
+            patterns = [
+                r'"content"\s*:\s*"([^"]+)"',  # Standard format
+                r'"content"\s*:\s*"([^"]*)',   # Unclosed quotes
+                r'"content"\s*:\s*\'([^\']+)\'',  # Single quotes
+                r'"content"\s*:\s*([^,"{}]+)',  # No quotes
+                r'content\s*:\s*"([^"]+)"',     # Unquoted key
+                r'content\s*:\s*([^,"{}]+)',    # Unquoted key and value
+            ]
+
+            for pattern in patterns:
+                match = re.search(pattern, json_str, re.DOTALL)
+                if match:
+                    content = match.group(1).strip()
+                    # If content is very long, truncate it
+                    if len(content) > 500:
+                        content = content[:497] + "..."
+                    return content
+
+            # If no matches found, return the first 100 chars of text
+            if len(json_str) > 100:
+                return json_str[:97] + "..."
+            return json_str
+
+        except Exception as e:
+            self.logger.error(f"Error extracting content: {e}")
+            return "Error extracting thought content"
+
     def _update_topics_of_interest(self, topics):
         """Update interest scores for topics."""
         for topic in topics:
@@ -560,6 +680,7 @@ class AutonomyModule:
                 if self.topics_of_interest[topic] < 0.2:
                     del self.topics_of_interest[topic]
 
+
     def _store_thought_in_memory(self, thought):
         """Store a thought in the memory system."""
         try:
@@ -577,7 +698,7 @@ class AutonomyModule:
                 'importance': thought.get('importance', 0.5)
             }
 
-            # Store in episodic memory directly (without using memory_queue)
+            # Store in episodic memory (Using direct storage instead of queue)
             self.memory.store_episodic_memory(memory_entry)
 
             # Add to working memory if important

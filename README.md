@@ -10,6 +10,7 @@ This project implements a cognitive architecture for AI agents that aims to mode
 - **Memory**: Storing and retrieving experiences, knowledge, and working memory
 - **Cognition**: Reasoning, planning, and emotional processing
 - **Consciousness**: A high-level interface with the external world that coordinates actions
+- **Autonomy**: Self-directed thinking, curiosity-driven learning, and conversation initiation
 
 The architecture is designed to be flexible and adaptable to different hardware platforms, from desktop computers to physical robots.
 
@@ -20,6 +21,8 @@ The architecture is designed to be flexible and adaptable to different hardware 
 - **Hardware Abstraction**: Adapts to available sensors and actuators on different platforms
 - **Memory Systems**: Includes working memory, episodic memory, and semantic memory
 - **Simulated Hardware**: Provides simulated sensors and actuators for testing and development
+- **Autonomous Thinking**: Generates internal thoughts, questions, and reflections
+- **Proactive Communication**: Can initiate conversations based on interests and curiosity
 
 ## Project Structure
 
@@ -27,6 +30,7 @@ The architecture is designed to be flexible and adaptable to different hardware 
 embodied_agent/
 ├── core/                   # Core cognitive modules
 │   ├── agent.py           # Main agent orchestration
+│   ├── autonomy.py        # Autonomous thinking capabilities
 │   ├── consciousness.py   # "Conscious" interface LLM
 │   ├── perception.py      # Sensory processing modules
 │   ├── cognition.py       # Reasoning, emotions, planning
@@ -49,6 +53,8 @@ embodied_agent/
 │   └── output/            # Output logs
 ├── logs/                   # Log files
 ├── main.py                 # Application entry point
+├── enhanced_chat.py        # Enhanced chat interface
+├── test_autonomy.py        # Script to test autonomous thinking
 └── config.yaml             # Configuration parameters
 ```
 
@@ -81,17 +87,27 @@ embodied_agent/
    python main.py
    ```
 
-2. To specify a different configuration file:
+2. To use the enhanced chat interface:
+   ```
+   python enhanced_chat.py
+   ```
+
+3. To test autonomous thinking capabilities:
+   ```
+   python test_autonomy.py --seed-topics
+   ```
+
+4. To specify a different configuration file:
    ```
    python main.py -c custom_config.yaml
    ```
 
-3. To run on a specific hardware platform:
+5. To run on a specific hardware platform:
    ```
    python main.py --hardware robot
    ```
 
-4. To enable debug mode:
+6. To enable debug mode:
    ```
    python main.py --debug
    ```
@@ -104,6 +120,25 @@ The agent is configured through the `config.yaml` file. Some key configuration o
 - **LLM Models**: Configure which models to use for different cognitive functions
 - **Processing Intervals**: Set how frequently different modules should run
 - **Memory Settings**: Configure memory capacities and storage
+- **Autonomy Settings**: Configure autonomous thinking behavior and conversation initiation
+
+## Autonomous Capabilities
+
+The agent now features advanced autonomous thinking capabilities including:
+
+- **Self-directed thinking**: The agent can generate its own thoughts without external prompting
+- **Multiple thinking modes**: Analytical, creative, reflective, exploratory, etc.
+- **Curiosity-driven learning**: Develops interests in topics and formulates questions
+- **Metacognition**: Reflects on its own thinking processes and patterns
+- **Conversation initiation**: Can proactively start conversations based on its interests
+
+These capabilities enable the agent to exhibit more human-like cognitive behavior, including:
+
+- Developing and exploring interests without external direction
+- Creating coherent internal narrative threads through related thoughts
+- Varying thinking styles based on emotional states and context
+- Building rich associations between memories and concepts
+- Engaging in conversations in a more natural, less reactive way
 
 ## Extending
 
@@ -125,6 +160,12 @@ The agent is configured through the `config.yaml` file. Some key configuration o
 2. Add platform-specific sensor and actuator implementations
 3. Create a configuration section for the new platform
 
+### Extending Autonomy
+
+1. Add new thinking modes to the `AutonomyModule`
+2. Implement custom topic selection or interest development algorithms
+3. Create new memory consolidation methods for autonomous thoughts
+
 ## How It Works
 
 The agent operates through several parallel processing loops:
@@ -132,9 +173,10 @@ The agent operates through several parallel processing loops:
 1. **Perception Loop**: Polls sensors, processes the data with specialized LLMs
 2. **Cognition Loop**: Reasons about perceptions, updates emotional state, plans actions
 3. **Consciousness Loop**: Processes external communications, maintains internal monologue
-4. **Memory Consolidation**: Periodically consolidates important memories
+4. **Autonomy Loop**: Generates autonomous thoughts, manages curiosity and interests
+5. **Memory Consolidation**: Periodically consolidates important memories
 
-Data flows from perception through cognition to consciousness, with memory systems storing and providing context along the way.
+Data flows from perception through cognition to consciousness, with memory systems storing and providing context along the way. The autonomy module operates in parallel, injecting internally generated thoughts into the consciousness module.
 
 ## License
 

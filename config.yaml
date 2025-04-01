@@ -209,6 +209,26 @@ consciousness:
   # Maximum length of internal monologue
   max_monologue_length: 50
 
+  # Conversation initiation settings
+  enable_conversation_initiation: true
+  min_initiation_interval: 1800.0  # 30 minutes minimum between initiated conversations
+  idle_initiation_threshold: 900.0  # 15 minutes of idle time before possibly initiating
+
+# Autonomy module settings
+autonomy:
+  # LLM model to use for autonomous thinking
+  model: reasoning_engine
+
+  # Thought generation settings
+  thought_interval: 20.0  # seconds between autonomous thoughts
+  idle_threshold: 120.0  # seconds of inactivity before increasing thought frequency
+
+  # Metacognition settings
+  metacognition_interval: 600.0  # 10 minutes between metacognitive reflections
+
+  # Interest and curiosity settings
+  min_interest_threshold: 0.4  # Minimum interest score to consider a topic
+
 # Processing settings
 processing:
   # Processing intervals for different modules (seconds)

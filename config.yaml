@@ -15,8 +15,13 @@ hardware:
       - name: webcam
         type: camera
         enabled: true
-        frame_interval: 5.0  # seconds between frames
-        simulate: true
+        frame_interval: 1.0  # seconds between frames
+        simulate: false       # Set to false to use real camera
+        device: 1             # Use camera index 1 (from your test results)
+        alternative_devices: [2]  # Use camera index 2 as backup
+        width: 1280           # Request HD resolution
+        height: 720
+        debug_camera_init: true  # Enable detailed camera debugging
         simulate_data:
           - "A desk with a MacBook Pro, an external monitor, and a coffee mug. The code editor is open on the screen."
           - "A home office with a desk, computer, bookshelf, and window. Natural light coming through the window."
@@ -128,6 +133,7 @@ llm:
       type: ollama
       model_id: llama3.2-vision:latest
       api_base: http://localhost:11434/api
+      timeout: 6000.0
 
     audio_interpreter:
       type: ollama

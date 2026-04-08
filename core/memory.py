@@ -556,6 +556,32 @@ class MemoryManager:
                 )
             """)
 
+            # Create episodic_memory table (for compatibility with older code)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS episodic_memory (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp REAL,
+                    episode_type TEXT,
+                    content TEXT,
+                    importance REAL,
+                    last_accessed REAL,
+                    created_at REAL
+                )
+            """)
+
+            # Create facts table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS facts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    entity TEXT,
+                    attribute TEXT,
+                    value TEXT,
+                    source TEXT,
+                    timestamp REAL,
+                    confidence REAL
+                )
+            """)
+
             # Create semantic memories table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS semantic_memories (
@@ -568,11 +594,53 @@ class MemoryManager:
                 )
             """)
 
+            # Create semantic_memory table (for compatibility with older code)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS semantic_memory (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    concept TEXT,
+                    content TEXT,
+                    confidence REAL,
+                    last_updated REAL,
+                    created_at REAL
+                )
+            """)
+
+            # Create users table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id TEXT PRIMARY KEY,
+                    name TEXT,
+                    metadata TEXT,
+                    last_interaction REAL
+                )
+            """)
+
+            # Create conversations table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS conversations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp REAL,
+                    speaker TEXT,
+                    content TEXT,
+                    importance REAL
+                )
+            """)
+
+            # Create indexes for faster queries
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_perceptions_sensor_type ON perceptions(sensor_type)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_facts_entity ON facts(entity)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_facts_attribute ON facts(attribute)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_episodic_type ON episodic_memories(episode_type)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_semantic_concept ON semantic_memories(concept)")
+
             conn.commit()
             self.logger.debug("Database tables initialized")
 
         except Exception as e:
             self.logger.error(f"Error initializing database tables: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
 
     def store_perception(self, sensor_type, sensor_name, data, interpretation=""):
         """
@@ -1180,13 +1248,15 @@ class MemoryManager:
             self.logger.error(f"Error getting conversation summaries: {e}")
             return []
 
-    def get_related_memories(self, query, limit=5):
+
+    def get_related_memories(self, query, limit=5, context_type=None):
         """
-        Get memories related to a specific topic or query.
+        Get memories related to a specific topic or query with improved context filtering.
 
         Args:
             query: The topic or query to search for
             limit: Maximum number of memories to return
+            context_type: Optional context type to filter results (e.g., 'visual', 'conversation')
 
         Returns:
             List of related memories
@@ -1197,106 +1267,161 @@ class MemoryManager:
                 self.logger.error("No database connection available")
                 return []
 
-            # First, search in conversation summaries
-            cursor = conn.cursor()
-
             # Prepare query terms
             query_terms = query.lower().split()
 
-            # Build SQL query with OR conditions for each term
-            sql_query = """
-                SELECT id, timestamp, content, importance
-                FROM episodic_memories
-                WHERE episode_type = 'conversation_summary'
-                AND (
-            """
-
-            like_conditions = []
-            params = []
-
-            for term in query_terms:
-                if len(term) > 3:  # Skip short terms
-                    like_conditions.append("content LIKE ?")
-                    params.append(f"%{term}%")
-
-            if not like_conditions:
-                # If no valid terms, use the whole query
-                like_conditions.append("content LIKE ?")
-                params.append(f"%{query}%")
-
-            sql_query += " OR ".join(like_conditions)
-            sql_query += ") ORDER BY timestamp DESC LIMIT ?"
-            params.append(limit)
-
-            # Run query
-            cursor.execute(sql_query, params)
-
-            # Process results
+            # Start with an empty result list
             memories = []
-            for row in cursor.fetchall():
-                try:
-                    content = json.loads(row[2])
 
-                    memories.append({
-                        'type': 'conversation_summary',
-                        'id': row[0],
-                        'timestamp': row[1],
-                        'content': content.get('summary', ''),
-                        'importance': row[3]
-                    })
-                except:
-                    # Skip corrupted entries
-                    continue
+            # Only search in specific tables based on context_type
+            tables_to_search = []
+            if context_type == 'visual':
+                tables_to_search = ['perceptions']
+            elif context_type == 'conversation':
+                tables_to_search = ['conversations', 'episodic_memories']
+            elif context_type == 'facts':
+                tables_to_search = ['facts']
+            else:
+                # Search all relevant tables if no specific context
+                tables_to_search = ['episodic_memories', 'facts', 'perceptions']
 
-            # If we found enough memories, return them
-            if len(memories) >= limit:
-                return memories
+            # Search in episodic_memories if applicable
+            if 'episodic_memories' in tables_to_search:
+                # Build query conditions for each term
+                like_conditions = []
+                params = []
 
-            # Otherwise, also search in facts
-            remaining = limit - len(memories)
+                for term in query_terms:
+                    if len(term) > 3:  # Skip short terms
+                        like_conditions.append("content LIKE ?")
+                        params.append(f"%{term}%")
 
-            # Search in facts
-            sql_query = """
-                SELECT id, entity, attribute, value, timestamp
-                FROM facts
-                WHERE (
-            """
+                if like_conditions:
+                    # Execute query with all conditions
+                    sql_query = """
+                        SELECT id, timestamp, episode_type, content, importance
+                        FROM episodic_memories
+                        WHERE (""" + " OR ".join(like_conditions) + """)
+                        ORDER BY importance DESC, timestamp DESC
+                        LIMIT ?
+                    """
+                    params.append(limit)
 
-            like_conditions = []
-            params = []
+                    cursor = conn.cursor()
+                    cursor.execute(sql_query, params)
 
-            for term in query_terms:
-                if len(term) > 3:  # Skip short terms
-                    like_conditions.append("value LIKE ?")
-                    params.append(f"%{term}%")
+                    # Process results
+                    for row in cursor.fetchall():
+                        try:
+                            # Parse content if it looks like JSON
+                            content = row[3]
+                            if content.startswith('{') and content.endswith('}'):
+                                try:
+                                    content_obj = json.loads(content)
+                                    if 'summary' in content_obj:
+                                        content = content_obj['summary']
+                                except:
+                                    pass
 
-            if not like_conditions:
-                # If no valid terms, use the whole query
-                like_conditions.append("value LIKE ?")
-                params.append(f"%{query}%")
+                            memories.append({
+                                'type': 'episodic',
+                                'subtype': row[2],  # episode_type
+                                'id': row[0],
+                                'timestamp': row[1],
+                                'content': content,
+                                'importance': row[4]
+                            })
+                        except:
+                            # Skip entries that can't be processed
+                            continue
 
-            sql_query += " OR ".join(like_conditions)
-            sql_query += ") ORDER BY timestamp DESC LIMIT ?"
-            params.append(remaining)
+            # Search in facts if applicable
+            if 'facts' in tables_to_search:
+                # Similar query building as above
+                like_conditions = []
+                params = []
 
-            # Run query
-            cursor.execute(sql_query, params)
+                for term in query_terms:
+                    if len(term) > 3:
+                        like_conditions.append("value LIKE ? OR attribute LIKE ?")
+                        params.append(f"%{term}%")
+                        params.append(f"%{term}%")
 
-            # Process results
-            for row in cursor.fetchall():
-                memories.append({
-                    'type': 'fact',
-                    'id': row[0],
-                    'entity': row[1],
-                    'attribute': row[2],
-                    'value': row[3],
-                    'timestamp': row[4]
-                })
+                if like_conditions:
+                    remaining = max(0, limit - len(memories))
+                    if remaining > 0:
+                        sql_query = """
+                            SELECT id, entity, attribute, value, timestamp, confidence
+                            FROM facts
+                            WHERE (""" + " OR ".join(like_conditions) + """)
+                            ORDER BY confidence DESC, timestamp DESC
+                            LIMIT ?
+                        """
+                        params.append(remaining)
 
-            return memories
+                        cursor = conn.cursor()
+                        cursor.execute(sql_query, params)
+
+                        for row in cursor.fetchall():
+                            memories.append({
+                                'type': 'fact',
+                                'id': row[0],
+                                'entity': row[1],
+                                'attribute': row[2],
+                                'value': row[3],
+                                'timestamp': row[4],
+                                'confidence': row[5]
+                            })
+
+            # Search in perceptions if applicable (for visual context)
+            if 'perceptions' in tables_to_search:
+                remaining = max(0, limit - len(memories))
+                if remaining > 0:
+                    # For perceptions, filter by sensor type for visual
+                    if context_type == 'visual':
+                        sql_query = """
+                            SELECT id, timestamp, sensor_type, sensor_name, interpretation
+                            FROM perceptions
+                            WHERE sensor_type = 'camera'
+                            ORDER BY timestamp DESC
+                            LIMIT ?
+                        """
+                        cursor = conn.cursor()
+                        cursor.execute(sql_query, [remaining])
+
+                        for row in cursor.fetchall():
+                            try:
+                                # Parse interpretation if it looks like JSON
+                                interp = row[4]
+                                if interp and (interp.startswith('{') and interp.endswith('}')):
+                                    try:
+                                        interp_obj = json.loads(interp)
+                                        if 'description' in interp_obj:
+                                            interp = interp_obj['description']
+                                    except:
+                                        pass
+
+                                memories.append({
+                                    'type': 'perception',
+                                    'subtype': row[2],  # sensor_type
+                                    'id': row[0],
+                                    'timestamp': row[1],
+                                    'sensor': row[3],
+                                    'content': interp,
+                                })
+                            except:
+                                continue
+
+            # Sort final results by recency
+            memories.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
+
+            # Limit to requested amount
+            return memories[:limit]
 
         except Exception as e:
             self.logger.error(f"Error getting related memories: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
             return []
 
     def decay_memories(self, threshold_days=30):
@@ -1384,3 +1509,89 @@ class MemoryManager:
             except Exception as e:
                 self.logger.error(f"Error in memory worker: {e}")
                 time.sleep(0.5)  # Prevent thrashing on error
+
+
+    def reset_database(self):
+        """
+        Reset the memory database by dropping and recreating all tables.
+
+        Returns:
+            bool: Success flag
+        """
+        try:
+            conn = self._get_connection()
+            if not conn:
+                self.logger.error("No database connection available")
+                return False
+
+            cursor = conn.cursor()
+
+            # Get all table names
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = cursor.fetchall()
+
+            # Drop all tables
+            for table in tables:
+                table_name = table[0]
+                # Skip sqlite_sequence which manages autoincrement
+                if table_name != 'sqlite_sequence':
+                    cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+
+            conn.commit()
+
+            # Reinitialize tables
+            self._init_db_tables(conn)
+
+            # Clear in-memory data
+            self.working_memory = []
+            self.perception_memory = []
+
+            self.logger.info("Memory database reset successfully")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Error resetting memory database: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+            return False
+
+    def get_memory_stats(self):
+        """
+        Get statistics about memory contents.
+
+        Returns:
+            dict: Memory statistics by category
+        """
+        try:
+            conn = self._get_connection()
+            if not conn:
+                self.logger.error("No database connection available")
+                return {}
+
+            cursor = conn.cursor()
+            stats = {}
+
+            # Count items in each table
+            for table in ['perceptions', 'episodic_memories', 'episodic_memory',
+                          'facts', 'semantic_memories', 'semantic_memory',
+                          'users', 'conversations']:
+                try:
+                    cursor.execute(f"SELECT COUNT(*) FROM {table}")
+                    result = cursor.fetchone()
+                    if result:
+                        stats[table] = result[0]
+                except:
+                    # Table might not exist
+                    stats[table] = 0
+
+            # Add working memory count
+            stats['working_memory'] = len(self.working_memory)
+
+            # Add perception memory count
+            stats['perception_memory'] = len(self.perception_memory)
+
+            return stats
+
+        except Exception as e:
+            self.logger.error(f"Error getting memory stats: {e}")
+            return {}

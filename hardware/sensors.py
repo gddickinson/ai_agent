@@ -14,6 +14,10 @@ import json
 import os
 import base64
 import random
+import numpy as np
+from PIL import Image
+import io
+import cv2
 
 class SensorInterface(ABC):
     """Base class for sensor interfaces."""
@@ -52,113 +56,317 @@ class SensorInterface(ABC):
         """
         pass
 
-class CameraSensor(SensorInterface):
-    """Interface for camera input."""
+class CameraSensor:
+    """Interface for camera sensors."""
 
     def __init__(self, config):
         """Initialize camera sensor."""
-        super().__init__(config)
+        self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        self.config = config
+        self.name = config.get('name', 'camera')
         self.type = 'camera'
-        self.data_queue = queue.Queue()
-        self.thread = None
+        self.enabled = config.get('enabled', True)
+        self.running = False
 
-        # Camera settings
+        # Frame capture settings
         self.frame_interval = config.get('frame_interval', 1.0)  # seconds between frames
+        self.last_capture_time = 0
+        self.current_frame = None
+        self.frame_queue = queue.Queue(maxsize=3)  # Buffer a few frames
 
-        # Simulation settings
+        # Camera device settings
+        self.camera_device = config.get('device', 0)  # Default webcam
+        self.capture_width = config.get('width', 640)
+        self.capture_height = config.get('height', 480)
+
+        # Simulation settings (for testing)
         self.simulate = config.get('simulate', False)
-        self.simulate_data = config.get('simulate_data', [])
+        self.simulate_data = config.get('simulate_data', [
+            "A desk with a computer and some papers.",
+            "A person sitting at a desk, working on a computer.",
+            "An empty room with white walls and a window."
+        ])
 
-        # Initialize frame counter
-        self.frame_count = 0
+        # Debug flags
+        self.debug_camera_init = config.get('debug_camera_init', False)
+
+        # OpenCV video capture
+        self.cap = None
+        self.capture_thread = None
 
         self.logger.info(f"Initialized camera sensor: {self.name}")
 
     def start(self):
         """Start the camera sensor."""
-        if self.running:
+        if self.running or not self.enabled:
             return
 
         self.running = True
 
         if self.simulate:
-            self.thread = threading.Thread(
-                target=self._simulate_camera,
-                name=f"camera_{self.name}_thread",
-                daemon=True
-            )
-            self.thread.start()
-            self.logger.info(f"Started simulated camera: {self.name}")
+            # Start simulation thread
+            self.logger.info(f"Starting simulated camera: {self.name}")
         else:
-            # Implementation for real camera would go here
-            # e.g., initialize webcam, start capture thread, etc.
-            self.logger.warning(f"Real camera not implemented, falling back to simulation")
-            self.simulate = True
-            self.start()  # Restart with simulation
+            # Initialize the camera
+            try:
+                self.logger.info(f"Attempting to open camera device: {self.camera_device}")
+
+                # If we're in debug mode, try to detect all available cameras
+                if self.debug_camera_init:
+                    self._detect_available_cameras()
+
+                # Open the camera
+                self.cap = cv2.VideoCapture(self.camera_device)
+                if not self.cap.isOpened():
+                    self.logger.error(f"Failed to open camera device {self.camera_device}")
+
+                    # Try alternative camera devices if specified
+                    alt_devices = self.config.get('alternative_devices', [])
+                    for alt_device in alt_devices:
+                        self.logger.info(f"Trying alternative camera device: {alt_device}")
+                        self.cap = cv2.VideoCapture(alt_device)
+                        if self.cap.isOpened():
+                            self.logger.info(f"Successfully opened alternative camera device: {alt_device}")
+                            self.camera_device = alt_device
+                            break
+
+                    # If still not open, fall back to simulation
+                    if not self.cap.isOpened():
+                        self.logger.warning("All camera devices failed, falling back to simulation mode")
+                        self.simulate = True
+                        return
+
+                # Set resolution
+                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.capture_width)
+                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.capture_height)
+
+                # Get actual resolution (may differ from requested)
+                actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                actual_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+                self.logger.info(f"Camera initialized with resolution {actual_width}x{actual_height}")
+
+                # Test capture - try to get a single frame
+                ret, test_frame = self.cap.read()
+                if not ret or test_frame is None:
+                    self.logger.error("Camera opened but failed to capture test frame")
+                    self.simulate = True
+                    self.cap.release()
+                    self.cap = None
+                    return
+
+                # Log successful test capture
+                self.logger.info(f"Successfully captured test frame with shape: {test_frame.shape}")
+
+                # Start capture thread
+                self.capture_thread = threading.Thread(
+                    target=self._capture_loop,
+                    name=f"camera_{self.name}_thread",
+                    daemon=True
+                )
+                self.capture_thread.start()
+                self.logger.info(f"Started camera capture thread")
+
+            except Exception as e:
+                self.logger.error(f"Error initializing camera: {e}")
+                self.logger.error(traceback.format_exc())
+                self.simulate = True
+                self.logger.warning("Falling back to simulation mode due to error")
+
+    def _detect_available_cameras(self):
+        """Debug function to detect all available cameras."""
+        self.logger.info("Detecting available cameras...")
+
+        # Try up to 3 camera indices
+        max_cameras = 3
+        available_cameras = []
+
+        for idx in range(max_cameras):
+            try:
+                # Try to open the camera
+                cap = cv2.VideoCapture(idx)
+                if cap.isOpened():
+                    # Try to read a frame
+                    ret, _ = cap.read()
+                    if ret:
+                        available_cameras.append(idx)
+                        self.logger.info(f"Camera index {idx} is available")
+                    else:
+                        self.logger.info(f"Camera index {idx} opened but frame read failed")
+                    cap.release()
+                else:
+                    self.logger.info(f"Camera index {idx} failed to open")
+            except Exception as e:
+                self.logger.info(f"Error testing camera index {idx}: {e}")
+
+        if available_cameras:
+            self.logger.info(f"Available camera indices: {available_cameras}")
+        else:
+            self.logger.warning("No available cameras detected")
 
     def stop(self):
         """Stop the camera sensor."""
         self.running = False
-        if self.thread and self.thread.is_alive():
-            self.thread.join(timeout=2.0)
+
+        # Wait for capture thread to finish
+        if self.capture_thread and self.capture_thread.is_alive():
+            try:
+                self.capture_thread.join(timeout=2.0)
+            except Exception as e:
+                self.logger.error(f"Error stopping capture thread: {e}")
+
+        # Release camera
+        if self.cap and not self.simulate:
+            try:
+                self.cap.release()
+                self.cap = None
+            except Exception as e:
+                self.logger.error(f"Error releasing camera: {e}")
+
         self.logger.info(f"Stopped camera: {self.name}")
 
-    def get_data(self) -> Dict[str, Any]:
-        """Get the latest camera frame."""
-        try:
-            # Non-blocking get
-            data = self.data_queue.get_nowait()
-            self.data_queue.task_done()
-            return data
-        except queue.Empty:
-            return {}
+    def get_data(self):
+        """
+        Get the latest frame from the camera.
 
-    # Update in sensors.py for the CameraSensor class
-    def _simulate_camera(self):
-        """Simulate camera data for testing."""
-        self.logger.debug(f"Starting camera simulation for {self.name}")
+        Returns:
+            Dictionary with frame data
+        """
+        current_time = time.time()
 
-        # Get simulated data if configured
-        simulated_data = self.config.get('simulate_data', [
-            "A desk with a computer monitor, keyboard, and mouse.",
-            "A room with various furniture and equipment.",
-            "A person sitting at a desk working on a computer.",
-            "An office space with natural light coming through windows."
-        ])
+        # Check if enough time has passed since the last capture
+        if current_time - self.last_capture_time < self.frame_interval:
+            return None
 
-        try:
-            while self.running:
-                # Generate simulated frame
-                if simulated_data:
-                    # Rotate through simulated data
-                    frame_description = simulated_data[self.frame_count % len(simulated_data)]
-                    self.frame_count += 1
-                else:
-                    # Default description
-                    frame_description = "A room with various objects."
+        self.last_capture_time = current_time
 
-                # Create simulated frame data
-                frame_data = {
-                    'type': 'camera',
-                    'timestamp': time.time(),
-                    'frame_id': self.frame_count,
-                    'description': frame_description,
-                    'simulated': True
+        if self.simulate:
+            # Return simulated data
+            description = random.choice(self.simulate_data)
+
+            return {
+                'type': self.type,
+                'name': self.name,
+                'timestamp': current_time,
+                'simulated': True,
+                'description': description,
+                'frame': None
+            }
+        else:
+            try:
+                # Get the latest frame from the queue
+                try:
+                    frame = self.frame_queue.get_nowait()
+                    self.frame_queue.task_done()
+                    self.current_frame = frame
+                except queue.Empty:
+                    # If queue is empty, use the current frame
+                    frame = self.current_frame
+
+                if frame is None:
+                    # No frame available yet
+                    return None
+
+                # Resize for vision model and convert to base64
+                # The vision model typically expects a smaller image
+                vision_frame = cv2.resize(frame, (512, 384))
+
+                # Convert to base64 for transmission to vision model
+                _, buffer = cv2.imencode('.jpg', vision_frame)
+                base64_image = base64.b64encode(buffer).decode('utf-8')
+
+                return {
+                    'type': self.type,
+                    'name': self.name,
+                    'timestamp': current_time,
+                    'simulated': False,
+                    'frame': frame,  # Original frame for display
+                    'frame_width': frame.shape[1],
+                    'frame_height': frame.shape[0],
+                    'base64_image': base64_image,  # Base64 encoded image for vision model
+                    'description': None  # Will be filled by vision model
                 }
 
-                # Add to data queue
-                self.data_queue.put(frame_data)
-                self.logger.debug(f"Generated simulated camera frame: {frame_description[:30]}...")
+            except Exception as e:
+                self.logger.error(f"Error getting camera data: {e}")
+                return None
 
-                # Sleep for frame interval
-                time.sleep(self.frame_interval)
+    def _capture_loop(self):
+        """Background thread for capturing frames."""
+        self.logger.debug(f"Starting camera capture loop")
+
+        while self.running:
+            try:
+                if not self.cap or not self.cap.isOpened():
+                    self.logger.error("Camera is not open in capture loop")
+                    time.sleep(1.0)
+                    continue
+
+                # Capture frame
+                ret, frame = self.cap.read()
+                if not ret:
+                    self.logger.error("Failed to capture frame in capture loop")
+                    time.sleep(0.1)
+                    continue
+
+                # Store frame
+                try:
+                    # Update current frame
+                    self.current_frame = frame
+
+                    # Try to add to queue, but don't block if full
+                    if not self.frame_queue.full():
+                        self.frame_queue.put(frame, block=False)
+                except queue.Full:
+                    # Queue is full, skip this frame
+                    pass
+
+                # Sleep a short time to avoid maxing out CPU
+                time.sleep(0.01)
+
+            except Exception as e:
+                self.logger.error(f"Error in camera capture loop: {e}")
+                time.sleep(0.1)
+
+    def test_camera_connection(self):
+        """Test if the camera can be accessed and return diagnostic information."""
+        test_results = {
+            'success': False,
+            'camera_device': self.camera_device,
+            'errors': [],
+            'messages': []
+        }
+
+        try:
+            # Try to open the camera
+            cap = cv2.VideoCapture(self.camera_device)
+            test_results['opened'] = cap.isOpened()
+
+            if not cap.isOpened():
+                test_results['errors'].append(f"Failed to open camera device {self.camera_device}")
+            else:
+                test_results['messages'].append(f"Successfully opened camera device {self.camera_device}")
+
+                # Try to read a frame
+                ret, frame = cap.read()
+                test_results['frame_read'] = ret
+
+                if not ret:
+                    test_results['errors'].append("Failed to read frame")
+                else:
+                    test_results['messages'].append(f"Successfully read frame with shape {frame.shape}")
+                    test_results['frame_width'] = frame.shape[1]
+                    test_results['frame_height'] = frame.shape[0]
+                    test_results['success'] = True
+
+                # Release the camera
+                cap.release()
 
         except Exception as e:
-            self.logger.error(f"Error in camera simulation: {e}")
-            self.logger.error(traceback.format_exc())
+            test_results['errors'].append(f"Exception: {str(e)}")
+            test_results['success'] = False
 
-        finally:
-            self.logger.debug(f"Camera simulation stopping for {self.name}")
+        return test_results
 
 class MicrophoneSensor(SensorInterface):
     """Interface for microphone sensors."""

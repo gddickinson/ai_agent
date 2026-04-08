@@ -8,6 +8,8 @@ import traceback
 import time
 import json
 from typing import Dict, Any, List
+import re
+import requests
 
 from llm.manager import LLMManager
 from core.memory import MemoryManager
@@ -420,20 +422,21 @@ class PerceptionModule:
             perception_id: ID of stored raw perception (if any)
         """
         try:
-            # Extract frame description for simulated cameras
+            # Check if we have real frame data or simulated data
             if data.get('simulated', False) and 'description' in data:
+                # For simulated cameras, use the pre-generated description
                 description = data['description']
+                interpretation = json.dumps({
+                    'type': 'visual',
+                    'description': description,
+                    'timestamp': data.get('timestamp', time.time())
+                })
 
-                # Store the interpretation
+                # Update the perception with interpretation
                 if perception_id:
-                    # Update the perception with interpretation
                     self.memory.update_perception(
                         perception_id=perception_id,
-                        interpretation=json.dumps({
-                            'type': 'visual',
-                            'description': description,
-                            'timestamp': data.get('timestamp', time.time())
-                        })
+                        interpretation=interpretation
                     )
 
                 # Add to working memory
@@ -448,8 +451,203 @@ class PerceptionModule:
                     importance=0.5  # Medium importance for visual input
                 )
 
-                self.logger.debug(f"Processed camera data: {description[:100]}...")
+                self.logger.debug(f"Processed simulated camera data: {description[:100]}...")
+
+            elif 'base64_image' in data:
+                # For real cameras, send the frame to the vision model
+                self._process_frame_with_vision_model(
+                    sensor_name=sensor_name,
+                    data=data,
+                    perception_id=perception_id
+                )
 
         except Exception as e:
             self.logger.error(f"Error processing camera data: {e}")
             self.logger.error(traceback.format_exc())
+
+
+
+
+    def _process_frame_with_vision_model(self, sensor_name, data, perception_id=None):
+        """
+        Process a camera frame with the vision LLM with improved fallbacks.
+
+        Args:
+            sensor_name: Name of the camera sensor
+            data: Camera data with base64_image
+            perception_id: ID of stored raw perception (if any)
+        """
+        self.logger.debug(f"Processing frame with vision model for {sensor_name}")
+
+        # Extract the base64 image
+        base64_image = data.get('base64_image')
+        if not base64_image:
+            self.logger.warning("No base64 image found in camera data")
+            return
+
+        # Create a simpler prompt for faster vision model processing
+        prompt = "Please describe this image briefly. Focus on what's clearly visible in the frame."
+
+        # Get timeout from model config or use a reasonable default
+        model_config = self.llm_manager.models.get(self.vision_model, {}).config
+        timeout_seconds = model_config.get('timeout', 200.0)  # 200 second default timeout
+
+        self.logger.info(f"Sending image to vision model with {timeout_seconds}s timeout")
+
+        # Flag to track if we successfully sent the image for processing
+        vision_processing_attempted = False
+
+        # Track the start time
+        start_time = time.time()
+
+        # Define callback for vision model response
+        def vision_callback(result, task):
+            nonlocal vision_processing_attempted
+            vision_processing_attempted = True
+
+            elapsed_time = time.time() - start_time
+            self.logger.debug(f"Vision processing completed in {elapsed_time:.1f} seconds")
+
+            if result:
+                try:
+                    # Extract interpretation
+                    interpretation_text = result.get('text', '')
+
+                    # Try to clean up the text if it has markdown formatting
+                    clean_text = interpretation_text
+                    if clean_text.startswith('```') and '```' in clean_text[3:]:
+                        # Remove code block markers if present
+                        clean_text = clean_text.split('```', 2)[1]
+                        if clean_text.startswith('json'):
+                            clean_text = clean_text[4:]
+
+                    # Try to parse as JSON if it looks like JSON
+                    interpretation_data = None
+                    if (clean_text.strip().startswith('{') and
+                        clean_text.strip().endswith('}')):
+                        try:
+                            interpretation_data = json.loads(clean_text)
+                        except:
+                            pass
+
+                    # If not JSON or parsing failed, create a basic structure
+                    if not interpretation_data:
+                        interpretation_data = {
+                            "description": interpretation_text[:250] if len(interpretation_text) > 250 else interpretation_text,
+                            "key_elements": ["camera frame"]
+                        }
+
+                    # Extract description for working memory
+                    if "description" in interpretation_data:
+                        description = interpretation_data["description"]
+                    else:
+                        description = interpretation_text[:250]
+
+                    # Add full interpretation to perception record
+                    if perception_id:
+                        self.memory.update_perception(
+                            perception_id=perception_id,
+                            interpretation=json.dumps(interpretation_data)
+                        )
+
+                    # Add to working memory with context type for better memory retrieval
+                    self.memory.add_to_working_memory(
+                        item={
+                            'type': 'perception',
+                            'sensor': sensor_name,
+                            'sensor_type': 'camera',
+                            'context_type': 'visual',  # Add context type for better retrieval
+                            'content': f"Visual: {description}",
+                            'timestamp': data.get('timestamp', time.time())
+                        },
+                        importance=0.7  # Higher importance for visual input
+                    )
+
+                    # Update the data with the description
+                    data['description'] = description
+
+                    self.logger.debug(f"Processed camera frame with vision model: {description[:100]}...")
+
+                except Exception as e:
+                    self.logger.error(f"Error processing vision model result: {e}")
+                    self.logger.error(traceback.format_exc())
+
+                    # Create a helpful fallback description
+                    fallback_message = "I received an image but encountered an error while processing it. The vision processing system experienced a technical issue."
+                    data['description'] = fallback_message
+
+                    # Still add to working memory but mark as error
+                    self.memory.add_to_working_memory(
+                        item={
+                            'type': 'perception',
+                            'sensor': sensor_name,
+                            'sensor_type': 'camera',
+                            'context_type': 'visual',
+                            'content': f"Visual Error: {fallback_message}",
+                            'error': str(e),
+                            'timestamp': data.get('timestamp', time.time())
+                        },
+                        importance=0.5  # Lower importance for error
+                    )
+            else:
+                error_msg = task.error if hasattr(task, 'error') and task.error else "unknown error"
+                self.logger.error(f"Vision model processing failed: {error_msg}")
+
+                # Create a helpful fallback description
+                fallback_message = "I received your image but couldn't analyze it completely. The vision system encountered a processing error."
+                data['description'] = fallback_message
+
+                # Add to working memory but mark as error
+                self.memory.add_to_working_memory(
+                    item={
+                        'type': 'perception',
+                        'sensor': sensor_name,
+                        'sensor_type': 'camera',
+                        'context_type': 'visual',
+                        'content': f"Visual Error: {fallback_message}",
+                        'error': error_msg,
+                        'timestamp': data.get('timestamp', time.time())
+                    },
+                    importance=0.5  # Lower importance for error
+                )
+
+        try:
+            # Set up for vision model using the /api/generate endpoint with images array
+            # Submit task to LLM manager using the correct format
+            self.llm_manager.submit_task(
+                model_name=self.vision_model,
+                prompt=prompt,
+                callback=vision_callback,
+                max_tokens=256,
+                temperature=0.2,
+                options={
+                    "images": [base64_image],
+                    "timeout": timeout_seconds
+                }
+            )
+
+            # Set a flag indicating we've attempted vision processing
+            vision_processing_attempted = True
+
+        except Exception as e:
+            error_msg = f"Error submitting task to vision model: {e}"
+            self.logger.error(error_msg)
+            self.logger.error(traceback.format_exc())
+
+            # Provide a helpful fallback message for technical errors
+            fallback_message = "I received your image but couldn't start the vision analysis process due to a technical issue."
+            data['description'] = fallback_message
+
+            # Add to working memory as error
+            self.memory.add_to_working_memory(
+                item={
+                    'type': 'perception',
+                    'sensor': sensor_name,
+                    'sensor_type': 'camera',
+                    'context_type': 'visual',
+                    'content': f"Visual Error: {fallback_message}",
+                    'error': str(e),
+                    'timestamp': data.get('timestamp', time.time())
+                },
+                importance=0.5  # Lower importance for error
+            )

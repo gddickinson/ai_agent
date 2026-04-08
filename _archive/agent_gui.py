@@ -18,6 +18,7 @@ from typing import Dict, Any, List, Optional
 import cv2
 from PIL import Image, ImageTk
 import datetime
+import base64
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -167,22 +168,6 @@ class AgentGUI:
         self.monologue_display.tag_configure("timestamp", foreground="gray")
         self.monologue_display.tag_configure("thought", foreground="purple")
 
-    def create_camera_view(self, parent):
-        """Create the camera feed view."""
-        # Create a frame for camera controls
-        control_frame = ttk.Frame(parent)
-        control_frame.pack(fill=tk.X, padx=5, pady=5)
-
-        # Create camera feed label
-        self.camera_label = ttk.Label(parent)
-        self.camera_label.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        # Create camera description
-        self.camera_description = scrolledtext.ScrolledText(parent, wrap=tk.WORD, height=5, state=tk.DISABLED)
-        self.camera_description.pack(fill=tk.X, padx=5, pady=5)
-
-        # Initialize camera placeholder
-        self.update_camera_feed(None)
 
     def create_state_view(self, parent):
         """Create the agent state view."""
@@ -243,6 +228,83 @@ class AgentGUI:
         # Create perceptions display
         self.perceptions_display = scrolledtext.ScrolledText(perceptions_tab, wrap=tk.WORD, state=tk.DISABLED)
         self.perceptions_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # Create memory management tab
+        memory_mgmt_tab = ttk.Frame(memory_notebook)
+        memory_notebook.add(memory_mgmt_tab, text="Memory Management")
+
+        # Create frame for memory management controls
+        mgmt_frame = ttk.Frame(memory_mgmt_tab)
+        mgmt_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Add a warning label
+        warning_label = ttk.Label(
+            mgmt_frame,
+            text="Warning: Resetting memory will erase all stored facts, conversations, and experiences.",
+            foreground="red",
+            font=("Helvetica", 10, "bold")
+        )
+        warning_label.pack(pady=10)
+
+        # Add reset button
+        self.reset_button = ttk.Button(
+            mgmt_frame,
+            text="Reset Memory Database",
+            command=self._reset_memory_database
+        )
+        self.reset_button.pack(pady=10)
+
+        # Add status label
+        self.memory_status_label = ttk.Label(mgmt_frame, text="Memory system status: Active")
+        self.memory_status_label.pack(pady=10)
+
+        # Add memory statistics
+        self.memory_stats_display = scrolledtext.ScrolledText(mgmt_frame, wrap=tk.WORD, height=10)
+        self.memory_stats_display.pack(fill=tk.X, expand=True, padx=5, pady=5)
+        self.update_memory_stats()
+
+    def _reset_memory_database(self):
+        """Reset the memory database after confirmation."""
+        if messagebox.askyesno(
+            "Reset Memory Database",
+            "Are you sure you want to reset the memory database? This will erase all stored facts, conversations, and experiences."
+        ):
+            try:
+                # Call the memory manager's reset method
+                success = self.agent.memory.reset_database()
+
+                if success:
+                    messagebox.showinfo("Success", "Memory database has been reset successfully.")
+                    self.display_system_message("Memory database has been reset.")
+                    self.update_memory_stats()
+                else:
+                    messagebox.showerror("Error", "Failed to reset memory database.")
+            except Exception as e:
+                messagebox.showerror("Error", f"Error resetting memory database: {e}")
+
+
+    def update_memory_stats(self):
+        """Update memory statistics display."""
+        try:
+            stats = self.agent.memory.get_memory_stats()
+
+            # Enable editing
+            self.memory_stats_display.config(state=tk.NORMAL)
+            self.memory_stats_display.delete(1.0, tk.END)
+
+            # Add stats to display
+            self.memory_stats_display.insert(tk.END, "Memory System Statistics:\n\n")
+
+            if stats:
+                for category, count in stats.items():
+                    self.memory_stats_display.insert(tk.END, f"{category.capitalize()}: {count}\n")
+            else:
+                self.memory_stats_display.insert(tk.END, "No memory statistics available.")
+
+            # Disable editing
+            self.memory_stats_display.config(state=tk.DISABLED)
+        except Exception as e:
+            self.logger.error(f"Error updating memory stats: {e}")
 
     def create_autonomy_view(self, parent):
         """Create the autonomy view."""
@@ -619,101 +681,7 @@ class AgentGUI:
         except Exception as e:
             logging.error(f"Error updating autonomy displays: {e}")
 
-    def update_camera_from_agent(self):
-        """Update camera feed from agent's camera sensor if available."""
-        try:
-            # Get camera data from agent
-            webcam_data = None
-            sensor_data = self.agent.sensors.get_data('webcam')
 
-            if sensor_data and 'description' in sensor_data:
-                # Update camera description
-                self.camera_description.configure(state=tk.NORMAL)
-                self.camera_description.delete(1.0, tk.END)
-                self.camera_description.insert(tk.END, f"Camera Description: {sensor_data['description']}")
-                self.camera_description.configure(state=tk.DISABLED)
-
-                # Update camera placeholder with description
-                self.update_camera_feed(None, sensor_data['description'])
-        except Exception as e:
-            logging.error(f"Error updating camera feed: {e}")
-
-    def update_camera_feed(self, frame=None, description=None):
-        """
-        Update the camera feed display.
-
-        Args:
-            frame: CV2 frame or None for placeholder
-            description: Optional description text
-        """
-        try:
-            if frame is not None:
-                # Convert OpenCV frame to Tkinter-compatible image
-                cv2_img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                pil_img = Image.fromarray(cv2_img)
-                tk_img = ImageTk.PhotoImage(image=pil_img)
-
-                # Update label
-                self.camera_label.configure(image=tk_img)
-                self.camera_label.image = tk_img  # Keep a reference
-            else:
-                # Create a placeholder image with description
-                width, height = 320, 240
-                pil_img = Image.new('RGB', (width, height), color=(240, 240, 240))
-
-                # Add description text if available
-
-                if description:
-                    from PIL import ImageDraw, ImageFont
-                    draw = ImageDraw.Draw(pil_img)
-
-                    # Wrap text to fit in the image
-                    wrapped_text = []
-                    words = description.split()
-                    line = ""
-                    for word in words:
-                        test_line = line + word + " "
-                        # Check if line is too long
-                        if draw.textlength(test_line, font=None) > width - 20:
-                            wrapped_text.append(line)
-                            line = word + " "
-                        else:
-                            line = test_line
-                    wrapped_text.append(line)
-
-                    # Draw text
-                    y_position = 20
-                    for line in wrapped_text:
-                        draw.text((10, y_position), line, fill=(0, 0, 0))
-                        y_position += 20
-
-                # Convert to Tkinter image
-                tk_img = ImageTk.PhotoImage(image=pil_img)
-
-                # Update label
-                self.camera_label.configure(image=tk_img)
-                self.camera_label.image = tk_img  # Keep a reference
-
-        except Exception as e:
-            logging.error(f"Error updating camera feed: {e}")
-            # Create error placeholder
-            pil_img = Image.new('RGB', (320, 240), color=(240, 200, 200))
-
-            try:
-                # Add error text
-                from PIL import ImageDraw
-                draw = ImageDraw.Draw(pil_img)
-                draw.text((10, 100), "Error loading camera feed", fill=(255, 0, 0))
-
-                # Convert to Tkinter image
-                tk_img = ImageTk.PhotoImage(image=pil_img)
-
-                # Update label
-                self.camera_label.configure(image=tk_img)
-                self.camera_label.image = tk_img  # Keep a reference
-            except:
-                # Last resort fallback
-                self.camera_label.configure(image='', text="Camera error")
 
     def send_message(self):
         """Send a message to the agent."""
@@ -813,6 +781,251 @@ class AgentGUI:
         if messagebox.askokcancel("Quit", "Do you want to quit?"):
             self.running = False
             self.master.destroy()
+
+
+
+    def create_camera_view(self, parent):
+        """Create the camera feed view."""
+        # Create a frame for camera controls
+        control_frame = ttk.Frame(parent)
+        control_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        # Add start/stop button for camera
+        self.camera_button = ttk.Button(control_frame, text="Stop Camera", command=self.toggle_camera)
+        self.camera_button.pack(side=tk.LEFT, padx=5, pady=5)
+
+        # Add snapshot button
+        self.snapshot_button = ttk.Button(control_frame, text="Take Snapshot", command=self.take_snapshot)
+        self.snapshot_button.pack(side=tk.LEFT, padx=5, pady=5)
+
+        # Create camera feed label
+        self.camera_label = ttk.Label(parent)
+        self.camera_label.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # Create camera description
+        self.camera_description = scrolledtext.ScrolledText(parent, wrap=tk.WORD, height=5, state=tk.DISABLED)
+        self.camera_description.pack(fill=tk.X, padx=5, pady=5)
+
+        # Initialize camera state
+        self.camera_active = True
+
+        # Initialize camera placeholder
+        self.update_camera_feed(None)
+
+    def toggle_camera(self):
+        """Toggle the camera feed on/off."""
+        if self.camera_active:
+            # Stop the camera
+            self.camera_active = False
+            self.camera_button.configure(text="Start Camera")
+            self.update_camera_feed(None, "Camera feed paused")
+        else:
+            # Start the camera
+            self.camera_active = True
+            self.camera_button.configure(text="Stop Camera")
+            self.update_camera_from_agent()
+
+
+    def take_snapshot(self):
+        """Take a snapshot of the current camera feed and process it with vision model."""
+        if hasattr(self, 'current_frame') and self.current_frame is not None:
+            # Create a timestamped filename
+            timestamp = time.strftime("%Y%m%d-%H%M%S")
+            filename = f"snapshot_{timestamp}.jpg"
+
+            try:
+                # Save the image
+                cv2.imwrite(filename, self.current_frame)
+
+                # Show confirmation
+                self.display_system_message(f"Snapshot saved as {filename}")
+
+                # Process with vision model
+                if self.agent:
+                    # First, add a system message to indicate processing
+                    self.display_system_message("Processing image with vision model...")
+
+                    # Add a note about potential timeouts
+                    self.display_system_message("Note: Vision processing may take some time or time out on resource-constrained systems.")
+
+                    # Convert frame to base64 for vision model
+                    _, buffer = cv2.imencode('.jpg', self.current_frame)
+                    base64_image = base64.b64encode(buffer).decode('utf-8')
+
+                    # Create a special snapshot message - add a processing flag
+                    snapshot_message = {
+                        'id': f"snapshot_{int(time.time())}",
+                        'sender': 'human',
+                        'content': f"I just took a snapshot. Can you describe what you see in the image?",
+                        'timestamp': time.time(),
+                        'snapshot': True,  # Flag to indicate this is a snapshot message
+                        'processing': True  # Flag to indicate vision processing is in progress
+                    }
+
+                    # Send to agent - but don't send the vision data through the standard message path
+                    # because we want to avoid generating a response until vision processing is complete
+                    self.agent.consciousness.receive_snapshot_message(snapshot_message, base64_image)
+
+            except Exception as e:
+                self.display_system_message(f"Error saving or processing snapshot: {e}")
+        else:
+            self.display_system_message("No camera frame available for snapshot")
+
+    def update_camera_from_agent(self):
+        """Update camera feed from agent's camera sensor if available."""
+        try:
+            # Only process if camera is active
+            if not self.camera_active:
+                return
+
+            # Get camera data from agent
+            webcam_data = None
+            sensor_data = self.agent.sensors.get_data('webcam')
+
+            if sensor_data:
+                # Check if we have a real frame or simulated data
+                if sensor_data.get('simulated', False):
+                    if 'description' in sensor_data:
+                        # Update camera description
+                        self.camera_description.configure(state=tk.NORMAL)
+                        self.camera_description.delete(1.0, tk.END)
+                        self.camera_description.insert(tk.END, f"Camera Description: {sensor_data['description']}")
+                        self.camera_description.configure(state=tk.DISABLED)
+
+                        # Update camera placeholder with description
+                        self.update_camera_feed(None, sensor_data['description'])
+                else:
+                    # We have a real frame
+                    frame = sensor_data.get('frame')
+                    description = sensor_data.get('description')
+
+                    if frame is not None:
+                        # Store the current frame
+                        self.current_frame = frame
+
+                        # Update the camera feed
+                        self.update_camera_feed(frame, description)
+
+                        # Update camera description if available
+                        if description:
+                            self.camera_description.configure(state=tk.NORMAL)
+                            self.camera_description.delete(1.0, tk.END)
+                            self.camera_description.insert(tk.END, f"Camera Description: {description}")
+                            self.camera_description.configure(state=tk.DISABLED)
+        except Exception as e:
+            self.logger.error(f"Error updating camera feed: {e}")
+
+    def update_camera_feed(self, frame=None, description=None):
+        """
+        Update the camera feed display.
+
+        Args:
+            frame: CV2 frame or None for placeholder
+            description: Optional description text
+        """
+        try:
+            if frame is not None:
+                # Convert OpenCV frame to Tkinter-compatible image
+                cv2_img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+                # Resize to fit display area (adjust dimensions as needed)
+                display_width = 480  # Smaller size for better performance
+                display_height = 360
+
+                # Calculate aspect ratio
+                h, w = frame.shape[:2]
+                aspect = w / h
+
+                # Maintain aspect ratio while resizing
+                if aspect > display_width / display_height:  # Wider than tall
+                    resize_width = display_width
+                    resize_height = int(display_width / aspect)
+                else:  # Taller than wide
+                    resize_height = display_height
+                    resize_width = int(display_height * aspect)
+
+                # Resize image
+                cv2_img_resized = cv2.resize(cv2_img, (resize_width, resize_height))
+
+                pil_img = Image.fromarray(cv2_img_resized)
+                tk_img = ImageTk.PhotoImage(image=pil_img)
+
+                # Update label
+                self.camera_label.configure(image=tk_img)
+                self.camera_label.image = tk_img  # Keep a reference
+
+                # Store the current image
+                self.current_frame = frame
+
+                # Update camera description if available
+                if description:
+                    self.camera_description.configure(state=tk.NORMAL)
+                    self.camera_description.delete(1.0, tk.END)
+                    self.camera_description.insert(tk.END, f"Camera Description: {description}")
+                    self.camera_description.configure(state=tk.DISABLED)
+            else:
+                # Create a placeholder image with description
+                width, height = 480, 360
+                pil_img = Image.new('RGB', (width, height), color=(240, 240, 240))
+
+                # Add description text if available
+                if description:
+                    from PIL import ImageDraw, ImageFont
+                    draw = ImageDraw.Draw(pil_img)
+
+                    # Wrap text to fit in the image
+                    wrapped_text = []
+                    words = description.split()
+                    line = ""
+                    for word in words:
+                        test_line = line + word + " "
+                        # Check if line is too long
+                        if draw.textlength(test_line, font=None) > width - 20:
+                            wrapped_text.append(line)
+                            line = word + " "
+                        else:
+                            line = test_line
+                    wrapped_text.append(line)
+
+                    # Draw text
+                    y_position = 20
+                    for line in wrapped_text:
+                        draw.text((10, y_position), line, fill=(0, 0, 0))
+                        y_position += 20
+
+                # Convert to Tkinter image
+                tk_img = ImageTk.PhotoImage(image=pil_img)
+
+                # Update label
+                self.camera_label.configure(image=tk_img)
+                self.camera_label.image = tk_img  # Keep a reference
+
+                # Clear current frame
+                self.current_frame = None
+
+        except Exception as e:
+            self.logger.error(f"Error updating camera feed: {e}")
+            # Create error placeholder
+            pil_img = Image.new('RGB', (480, 360), color=(240, 200, 200))
+
+            try:
+                # Add error text
+                from PIL import ImageDraw
+                draw = ImageDraw.Draw(pil_img)
+                draw.text((10, 100), f"Error loading camera feed: {str(e)[:50]}", fill=(255, 0, 0))
+
+                # Convert to Tkinter image
+                tk_img = ImageTk.PhotoImage(image=pil_img)
+
+                # Update label
+                self.camera_label.configure(image=tk_img)
+                self.camera_label.image = tk_img  # Keep a reference
+            except:
+                # Last resort fallback
+                self.camera_label.configure(image='', text="Camera error")
+
+
+
 
 
 def main():

@@ -13,6 +13,7 @@ import traceback
 from typing import Dict, Any, List, Optional, Callable
 import re
 import random
+import requests
 
 class ConsciousnessModule:
     """
@@ -111,6 +112,7 @@ class ConsciousnessModule:
             self.logger.error(f"Error in consciousness processing: {e}")
             self.logger.error(traceback.format_exc())
 
+
     def _process_incoming_messages(self):
         """Process incoming messages from the outside world."""
         # Check if there are any messages to process
@@ -121,6 +123,20 @@ class ConsciousnessModule:
             try:
                 message = self.incoming_messages.get_nowait()
                 self.logger.debug(f"Processing incoming message: {message.get('id', 'unknown')}")
+
+                # Check if this is a snapshot message and is being processed
+                if message.get('id', '').startswith('snapshot_') and message.get('snapshot', False):
+                    # Check if we're already processing this snapshot
+                    snapshots_in_progress = getattr(self, 'snapshots_in_progress', {})
+
+                    if message.get('id') in snapshots_in_progress:
+                        # This snapshot is already being processed by vision model
+                        # Just acknowledge receipt and say we're working on it
+                        self.logger.info(f"Snapshot {message.get('id')} is being processed by vision model")
+
+                        # Skip further processing
+                        self.incoming_messages.task_done()
+                        continue
 
                 # Store message in memory
                 self.memory.add_to_working_memory(
@@ -577,6 +593,32 @@ class ConsciousnessModule:
             message: The message to process
         """
         try:
+            # Check if this is a snapshot message with processing flag
+            if message.get('id', '').startswith('snapshot_') and message.get('snapshot', False):
+                self.logger.info(f"Received snapshot request message: {message.get('id')}")
+                # We need to tell the user we're processing the image
+                # but we won't actually send it for vision processing here
+                # since that will be handled by receive_snapshot_message
+
+                # Store the snapshot request in memory
+                self.memory.add_to_working_memory(
+                    item={
+                        'type': 'snapshot_request',
+                        'content': message,
+                        'timestamp': time.time()
+                    },
+                    importance=0.6
+                )
+
+                # Only add to incoming queue if not already being processed
+                if not hasattr(self, 'snapshots_in_progress') or \
+                   message.get('id') not in self.snapshots_in_progress:
+                    # Add to incoming queue for normal processing
+                    self.incoming_messages.put(message)
+
+                return
+
+
             # Add timestamp if not present
             if 'timestamp' not in message:
                 message['timestamp'] = time.time()
@@ -666,6 +708,181 @@ class ConsciousnessModule:
         except Exception as e:
             self.logger.error(f"Error receiving message: {e}")
             self.logger.error(traceback.format_exc())
+
+
+    def receive_snapshot_message(self, message, base64_image):
+        """
+        Receive a snapshot message and coordinate vision processing.
+
+        Args:
+            message: The snapshot message
+            base64_image: Base64-encoded image data
+        """
+        self.logger.info(f"Received snapshot message: {message.get('id')}")
+
+        # Keep track of snapshots in progress
+        self.snapshots_in_progress = getattr(self, 'snapshots_in_progress', {})
+
+        # Store the message ID for later reference
+        snapshot_id = message.get('id')
+        self.snapshots_in_progress[snapshot_id] = True
+
+        # Process the image with vision model
+        def vision_callback(result, task):
+            try:
+                # Check if we have a result
+                if result and 'text' in result:
+                    # Extract the description
+                    description = result.get('text', '')
+
+                    # Create a vision result message
+                    vision_message = {
+                        'id': f"{snapshot_id}_response",
+                        'in_reply_to': snapshot_id,
+                        'content': f"I analyzed the snapshot and here's what I see:\n\n{description}",
+                        'timestamp': time.time(),
+                        'sender': 'agent',
+                        'recipient': message.get('sender', 'unknown'),
+                        'thought': "I've analyzed the image using my vision capabilities."
+                    }
+
+                    # Send the response
+                    self._send_response(vision_message)
+
+                    # Store the vision result in working memory
+                    self.memory.add_to_working_memory(
+                        item={
+                            'type': 'perception',
+                            'sensor_type': 'camera',
+                            'context_type': 'visual',
+                            'content': f"Visual: {description}",
+                            'snapshot_id': snapshot_id,
+                            'timestamp': time.time()
+                        },
+                        importance=0.7  # Higher importance for visual input
+                    )
+
+                    # Remove from in-progress snapshots
+                    if snapshot_id in self.snapshots_in_progress:
+                        del self.snapshots_in_progress[snapshot_id]
+
+                else:
+                    # Vision processing failed - send a failure message
+                    error_msg = "The vision model processing timed out. This may be due to computational constraints or the complexity of the image."
+
+                    failure_message = {
+                        'id': f"{snapshot_id}_response",
+                        'in_reply_to': snapshot_id,
+                        'content': f"I analyzed the snapshot and here's what I see:\n\n{error_msg}",
+                        'timestamp': time.time(),
+                        'sender': 'agent',
+                        'recipient': message.get('sender', 'unknown'),
+                        'thought': "I was unable to analyze the image due to processing limitations."
+                    }
+
+                    # Send the response
+                    self._send_response(failure_message)
+
+                    # Store the error in working memory
+                    self.memory.add_to_working_memory(
+                        item={
+                            'type': 'perception',
+                            'sensor_type': 'camera',
+                            'context_type': 'visual',
+                            'content': f"Visual Error: {error_msg}",
+                            'snapshot_id': snapshot_id,
+                            'timestamp': time.time()
+                        },
+                        importance=0.5  # Lower importance for error
+                    )
+
+                    # Remove from in-progress snapshots
+                    if snapshot_id in self.snapshots_in_progress:
+                        del self.snapshots_in_progress[snapshot_id]
+
+            except Exception as e:
+                self.logger.error(f"Error in vision callback: {e}")
+                self.logger.error(traceback.format_exc())
+
+        # Send image to vision model
+        try:
+            # Direct call to vision processing
+            prompt = "Please describe this image in detail. What do you see?"
+
+            # Get vision model from config
+            vision_model = self.llm_manager.models.get('vision_interpreter', None)
+            if not vision_model:
+                self.logger.error("Vision model not found")
+                return
+
+            # Get timeout setting
+            timeout = vision_model.config.get('timeout', 200.0)
+
+            # Log that we're starting vision processing
+            self.logger.info(f"Sending image to vision model with {timeout}s timeout")
+
+            # Create payload for vision model
+            payload = {
+                "model": vision_model.config.get('model_id', 'llama3.2-vision:latest'),
+                "prompt": prompt,
+                "images": [base64_image],
+                "stream": False,
+                "options": {
+                    "temperature": 0.2,
+                    "num_predict": 256
+                }
+            }
+
+            # Send to Ollama API directly
+            url = f"{vision_model.api_base.rstrip('/api')}/generate"
+
+            # Submit in a separate thread
+            def process_vision():
+                try:
+                    # Make request with timeout
+                    response = requests.post(
+                        url,
+                        json=payload,
+                        timeout=timeout
+                    )
+
+                    if response.status_code == 200:
+                        result = response.json()
+                        vision_callback(
+                            {
+                                "text": result.get("response", "")
+                            },
+                            None
+                        )
+                    else:
+                        self.logger.error(f"Vision API error: {response.status_code} {response.reason}")
+                        vision_callback(None, None)
+                except Exception as e:
+                    self.logger.error(f"Error in vision processing: {e}")
+                    vision_callback(None, None)
+
+            # Start vision processing in a separate thread
+            threading.Thread(
+                target=process_vision,
+                daemon=True
+            ).start()
+
+            # Store the message in memory for context
+            self.memory.add_to_working_memory(
+                item={
+                    'type': 'message',
+                    'content': message,
+                    'snapshot_id': snapshot_id,
+                    'timestamp': time.time()
+                },
+                importance=0.6
+            )
+
+        except Exception as e:
+            self.logger.error(f"Error processing snapshot: {e}")
+            self.logger.error(traceback.format_exc())
+
+
 
     def register_message_callback(self, callback_type, callback):
         """
@@ -889,11 +1106,17 @@ class ConsciousnessModule:
             return {}
 
     def _create_response_prompt(self, message, internal_state, recent_perceptions, working_memory, monologue_summary):
-        """Create a prompt for generating a response to a message."""
+        """Create a prompt for generating a response to a message with improved visual context handling."""
         try:
             # Extract message details
             message_content = message.get('content', '')
             message_sender = message.get('sender', 'unknown')
+            message_id = message.get('id', 'unknown')
+
+            # Check if this is a snapshot request
+            is_snapshot_request = False
+            if message_id.startswith('snapshot_') or 'snapshot' in message_content.lower():
+                is_snapshot_request = True
 
             # Get recent conversation
             recent_conversation = self.memory.get_recent_conversation(limit=5)
@@ -916,62 +1139,61 @@ class ConsciousnessModule:
 
             facts_text = "\n".join(user_facts) if user_facts else "No specific facts known about this user."
 
-            # Get relevant conversation summaries
-            previous_conversations = ""
-            if user_name != 'unknown':
-                summaries = self.memory.get_conversation_summaries(user_id=message_sender, limit=3)
-                if summaries:
-                    previous_conversations = "\nPrevious conversations:\n"
-                    for summary in summaries:
-                        timestamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(summary['timestamp']))
-                        previous_conversations += f"- {timestamp}: {summary['summary']}\n"
+            # Get visual perceptions with different handling for snapshot requests
+            visual_context = ""
+            if is_snapshot_request:
+                # For snapshot requests, prioritize VERY recent visual perceptions
+                recent_visual = []
 
-            # Identify topics and get related memories
-            topics = self._identify_conversation_topics(message_content)
-            related_memories = []
+                # First check working memory for recent visual perceptions
+                for item in working_memory:
+                    if (item.get('type') == 'perception' and
+                        item.get('sensor_type') == 'camera' and
+                        'content' in item):
+                        content = item.get('content', '')
+                        if content.startswith('Visual:'):
+                            recent_visual.append(content)
+                            break  # Just need the most recent one
 
-            if topics:
-                for topic in topics:
-                    memories = self.memory.get_related_memories(topic, limit=2)
-                    related_memories.extend(memories)
+                # Then check perception memory
+                if not recent_visual:
+                    for p in recent_perceptions:
+                        if p.get('type') == 'camera':
+                            desc = p.get('description', '')
+                            if desc:
+                                recent_visual.append(f"Visual: {desc}")
+                                break
 
-            # Format related memories
-            topic_memories = ""
-            if related_memories:
-                topic_memories = "\nRelated memories:\n"
-                for memory in related_memories:
-                    if memory['type'] == 'conversation_summary':
-                        timestamp = time.strftime("%Y-%m-%d", time.localtime(memory['timestamp']))
-                        topic_memories += f"- {timestamp}: {memory['content']}\n"
-                    elif memory['type'] == 'fact':
-                        # Format facts
-                        topic_memories += f"- I know that {memory['attribute']}: {memory['value']}\n"
+                # Found recent visual content
+                if recent_visual:
+                    visual_context = "## Recent Visual Information\n" + recent_visual[0]
+                else:
+                    # No visual info found
+                    visual_context = "## Visual Information\nNo recent visual information is available."
+            else:
+                # For non-snapshot messages, check if we need visual context
+                visual_keywords = ['see', 'look', 'image', 'picture', 'photo', 'camera', 'visual', 'snapshot']
+                needs_visual_context = any(keyword in message_content.lower() for keyword in visual_keywords)
 
-            # Format recent perceptions
-            perceptions = self.memory.get_recent_perceptions(limit=3)
-            perception_text = ""
-            for p in perceptions:
-                if p.get('type') == 'camera':
-                    interp = p.get('interpretation', '')
-                    if isinstance(interp, str) and len(interp) > 0:
-                        try:
-                            interp_data = json.loads(interp)
-                            perception_text += f"I can see: {interp_data.get('description', '')}\n"
-                        except:
-                            perception_text += f"I can see: {interp[:100]}\n"
+                if needs_visual_context:
+                    # Get visual memories using context type
+                    visual_memories = self.memory.get_related_memories(
+                        query=message_content,
+                        limit=2,
+                        context_type='visual'
+                    )
 
-            if not perception_text:
-                perception_text = "No visual information available."
+                    if visual_memories:
+                        visual_context = "## Relevant Visual Information\n"
+                        for memory in visual_memories:
+                            content = memory.get('content', '')
+                            if not content.startswith('Visual:'):
+                                content = f"Visual: {content}"
+                            visual_context += content + "\n"
+                    else:
+                        visual_context = "## Visual Information\nNo relevant visual information is available."
 
-            # Check for specific questions about known facts
-            # This helps the agent respond confidently to direct questions
-            question_type = "general"
-
-            # Check if the message is asking about age
-            if re.search(r'(?:how old|what.*age|age.*what)', message_content.lower()):
-                question_type = "age"
-
-            # Build response prompt with all available context
+            # Build response prompt with all available context and improved instructions
             prompt = f"""
     # Communication Task
 
@@ -988,27 +1210,27 @@ class ConsciousnessModule:
     ## Known Facts About User
     {facts_text}
 
-    ## Previous Interactions
-    {previous_conversations}
+    {visual_context}
 
-    ## Topic-Related Memories
-    {topic_memories}
+    ## Response Guidelines
+    1. If the user is asking about what you can see in an image:
+       - If visual information is available, describe what you see clearly and accurately
+       - If no visual information is available, politely explain you didn't receive visual data
+       - Never make up details about images you haven't seen
 
-    ## Visual Perception
-    {perception_text}
+    2. Maintain conversation continuity:
+       - Reference previous messages when appropriate
+       - If you previously described an image, you can refer back to it
 
-    ## Response Task
-    Generate a response that:
-    1. Directly addresses the user's message
-    2. Uses information from recent conversation and known facts when relevant
-    3. References previous conversations when appropriate
-    4. Incorporates topic-related memories naturally
-    5. Shows personality and appropriate emotion
-    6. Is helpful and informative
-    7. Is concise and to the point
+    3. Be honest about your capabilities:
+       - You do have camera access through snapshots
+       - Visual processing happens when the user takes a snapshot
+       - Explain technical issues if they occur (timeouts, processing errors)
 
-    ## Special Instructions
-    {f"The user is asking about their age. If you know their age, confidently state it in your response." if question_type == "age" else ""}
+    4. Your personality:
+       - Helpful, friendly, and attentive
+       - Curious about the world around you
+       - Maintains continuity across conversations
 
     ## Format Guidelines
     You MUST format your response as a valid JSON object with these exact keys:
@@ -1022,7 +1244,6 @@ class ConsciousnessModule:
     }}
     """
 
-            self.logger.debug(f"Generated prompt with user facts: {facts_text}")
             return prompt
 
         except Exception as e:

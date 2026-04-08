@@ -6,6 +6,8 @@ This script initializes and runs the embodied AI agent system.
 
 import argparse
 import logging
+import signal
+import sys
 import yaml
 import time
 import os
@@ -14,6 +16,9 @@ from pathlib import Path
 from core.agent import EmbodiedAgent
 from utils.config import load_config
 from utils.logging import setup_logging
+
+# Global reference for signal handler cleanup
+_agent = None
 
 def parse_args():
     """Parse command line arguments."""
@@ -36,8 +41,21 @@ def parse_args():
     )
     return parser.parse_args()
 
+def _signal_handler(signum: int, frame) -> None:
+    """Handle termination signals for graceful shutdown."""
+    global _agent
+    sig_name = signal.Signals(signum).name
+    logger = logging.getLogger(__name__)
+    logger.info(f"Received signal {sig_name}, initiating graceful shutdown...")
+    if _agent is not None and _agent.is_running:
+        _agent.stop()
+    sys.exit(0)
+
+
 def main():
     """Main entry point for the application."""
+    global _agent
+
     # Parse command line arguments
     args = parse_args()
 
@@ -45,6 +63,10 @@ def main():
     log_level = logging.DEBUG if args.debug else logging.INFO
     setup_logging(log_level)
     logger = logging.getLogger(__name__)
+
+    # Register signal handlers for graceful shutdown
+    signal.signal(signal.SIGTERM, _signal_handler)
+    signal.signal(signal.SIGINT, _signal_handler)
 
     logger.info("Starting Embodied AI Agent")
 
@@ -58,6 +80,7 @@ def main():
 
         # Initialize agent
         agent = EmbodiedAgent(config)
+        _agent = agent
 
         # Start agent
         agent.start()
@@ -76,6 +99,7 @@ def main():
         finally:
             # Cleanup
             agent.stop()
+            _agent = None
             logger.info("Agent stopped")
 
     except Exception as e:

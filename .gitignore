@@ -5,3 +5,8 @@ memory/memory.db
 memory/output/display.txt
 memory/output/speech.txt
 memory/output/display.txt
+/tests/__pycache__
+/llm/__pycache__
+/hardware/__pycache__
+/core/__pycache__
+/utils/__pycache__

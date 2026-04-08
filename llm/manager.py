@@ -8,6 +8,7 @@ import threading
 import queue
 import time
 from typing import Dict, Any, List, Callable, Optional, Tuple
+import json
 
 import requests
 
@@ -21,7 +22,8 @@ class LLMTask:
         callback: Optional[Callable] = None,
         max_tokens: int = 512,
         temperature: float = 0.7,
-        task_id: Optional[str] = None
+        task_id: Optional[str] = None,
+        options: Optional[Dict[str, Any]] = None
     ):
         """
         Initialize an LLM task.
@@ -33,6 +35,7 @@ class LLMTask:
             max_tokens: Maximum tokens to generate
             temperature: Sampling temperature
             task_id: Optional ID for this task
+            options: Additional options for the model
         """
         self.model_name = model_name
         self.prompt = prompt
@@ -40,6 +43,7 @@ class LLMTask:
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.task_id = task_id or str(id(self))
+        self.options = options or {}
         self.result = None
         self.completed = False
         self.error = None
@@ -92,8 +96,21 @@ class LLMModel:
         start_time = time.time()
 
         try:
+            # Check if this is a vision task
+            is_vision_task = False
+            try:
+                # Vision tasks will be JSON with "content" containing an "image_url" entry
+                if task.prompt.startswith('{') and '"image_url"' in task.prompt:
+                    is_vision_task = True
+            except:
+                pass
+
+            # Process based on model type and task type
             if self.model_type == 'ollama':
-                return self._process_ollama(task)
+                if is_vision_task:
+                    return self._process_ollama_vision(task)
+                else:
+                    return self._process_ollama(task)
             else:
                 raise ValueError(f"Unsupported model type: {self.model_type}")
         finally:
@@ -107,21 +124,60 @@ class LLMModel:
         """Process a task using Ollama API."""
         self.logger.debug(f"Processing task with Ollama model {self.model_id}")
 
+        # Check if this is a vision task with images
+        has_images = False
+        images = []
+
+        if hasattr(task, 'options') and isinstance(task.options, dict):
+            if 'images' in task.options and isinstance(task.options['images'], list):
+                has_images = True
+                images = task.options['images']
+
+        # Set the timeout
+        timeout = task.options.get('timeout', 6000.0) if hasattr(task, 'options') else 6000.0
+
+        # Prepare the URL and payload
         url = f"{self.api_base}/generate"
-        payload = {
-            "model": self.model_id,
-            "prompt": task.prompt,
-            "stream": False,
-            "options": {
-                "temperature": task.temperature,
-                "num_predict": task.max_tokens
+
+        if has_images:
+            # This is a vision task - use the images array format
+            payload = {
+                "model": self.model_id,
+                "prompt": task.prompt,
+                "images": images,
+                "stream": False,
+                "options": {
+                    "temperature": task.temperature,
+                    "num_predict": task.max_tokens
+                }
             }
-        }
+
+            # Note that we're using a vision model
+            self.logger.debug(f"Processing vision task with {len(images)} images")
+        else:
+            # Standard text task
+            payload = {
+                "model": self.model_id,
+                "prompt": task.prompt,
+                "stream": False,
+                "options": {
+                    "temperature": task.temperature,
+                    "num_predict": task.max_tokens
+                }
+            }
+
+        # Add any additional options
+        if hasattr(task, 'options') and isinstance(task.options, dict):
+            for k, v in task.options.items():
+                if k not in ['timeout', 'images']:  # Skip special options
+                    payload["options"][k] = v
 
         try:
-            response = requests.post(url, json=payload)
+            # Make the request with timeout
+            response = requests.post(url, json=payload, timeout=timeout)
             response.raise_for_status()
             result = response.json()
+
             return {
                 "text": result.get("response", ""),
                 "model": self.model_id,
@@ -132,9 +188,123 @@ class LLMModel:
                     "total_tokens": result.get("prompt_eval_count", 0) + result.get("eval_count", 0)
                 }
             }
+        except requests.exceptions.Timeout:
+            error_msg = f"Timeout after {timeout}s when calling Ollama API for model {self.model_id}"
+            self.logger.warning(error_msg)
+            return {
+                "text": f"The model processing timed out. This may be due to computational constraints or the complexity of the input.",
+                "model": self.model_id,
+                "task_id": task.task_id,
+                "error": "timeout",
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+            }
         except Exception as e:
             self.logger.error(f"Error in Ollama API call: {e}")
-            raise
+            return {
+                "text": f"Error processing request: {str(e)}",
+                "model": self.model_id,
+                "task_id": task.task_id,
+                "error": str(e),
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+            }
+
+
+    def _process_ollama_vision(self, task: LLMTask) -> Dict[str, Any]:
+        """Process a task using Ollama's vision model capabilities."""
+        self.logger.debug(f"Processing vision task with Ollama model {self.model_id}")
+
+        # Set default timeout for vision models (can be overridden in task options)
+        timeout = task.options.get('timeout', 6000.0) if hasattr(task, 'options') else 6000.0
+
+        try:
+            # For Ollama 0.1.25+, the format for vision models has changed
+            # We need to check if the prompt contains a JSON message or is plain text with images
+
+            images = []
+            prompt_text = ""
+
+            # Check if this is a JSON message with image content
+            if task.prompt.startswith('{'):
+                try:
+                    message_data = json.loads(task.prompt)
+
+                    # Extract text and images
+                    if 'content' in message_data:
+                        for content_item in message_data.get('content', []):
+                            if content_item.get('type') == 'text':
+                                prompt_text = content_item.get('text', '')
+                            elif content_item.get('type') == 'image_url':
+                                # Extract base64 image from data URL
+                                image_url = content_item.get('image_url', {}).get('url', '')
+                                if image_url.startswith('data:image/'):
+                                    # Extract base64 part
+                                    base64_img = image_url.split(',', 1)[1]
+                                    images.append(base64_img)
+                except json.JSONDecodeError:
+                    # Not valid JSON, treat as regular text
+                    prompt_text = task.prompt
+            else:
+                # Regular text prompt
+                prompt_text = task.prompt
+
+            # Construct the payload based on the new Ollama format
+            payload = {
+                "model": self.model_id,
+                "prompt": prompt_text,
+                "images": images,
+                "stream": False,
+                "options": {
+                    "temperature": task.temperature,
+                    "num_predict": task.max_tokens
+                }
+            }
+
+            # Add any additional options
+            if hasattr(task, 'options') and isinstance(task.options, dict):
+                for k, v in task.options.items():
+                    if k != 'timeout':  # Skip timeout as it's handled by requests
+                        payload["options"][k] = v
+
+            # Use the correct API endpoint
+            url = f"{self.api_base}/generate"  # For newer Ollama versions, use generate endpoint
+
+            # Make request with timeout
+            response = requests.post(url, json=payload, timeout=timeout)
+            response.raise_for_status()
+            result = response.json()
+
+            # Extract the response text
+            response_text = result.get("response", "")
+
+            return {
+                "text": response_text,
+                "model": self.model_id,
+                "task_id": task.task_id,
+                "usage": {
+                    "prompt_tokens": result.get("prompt_eval_count", 0),
+                    "completion_tokens": result.get("eval_count", 0),
+                    "total_tokens": result.get("prompt_eval_count", 0) + result.get("eval_count", 0)
+                }
+            }
+        except requests.exceptions.Timeout:
+            self.logger.warning(f"Timeout after {timeout}s when calling Ollama vision API for model {self.model_id}")
+            return {
+                "text": "The vision model processing timed out. This may be due to computational constraints or the complexity of the image.",
+                "model": self.model_id,
+                "task_id": task.task_id,
+                "error": "timeout",
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+            }
+        except Exception as e:
+            self.logger.error(f"Error in Ollama vision API call: {e}")
+            return {
+                "text": f"Error processing image: {str(e)}",
+                "model": self.model_id,
+                "task_id": task.task_id,
+                "error": str(e),
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+            }
+
 
 class LLMManager:
     """
@@ -240,7 +410,8 @@ class LLMManager:
         callback: Optional[Callable] = None,
         max_tokens: int = 512,
         temperature: float = 0.7,
-        task_id: Optional[str] = None
+        task_id: Optional[str] = None,
+        options: Optional[Dict[str, Any]] = None
     ) -> LLMTask:
         """
         Submit a task for processing by an LLM.
@@ -252,6 +423,7 @@ class LLMManager:
             max_tokens: Maximum tokens to generate
             temperature: Sampling temperature
             task_id: Optional ID for this task
+            options: Additional options for the model
 
         Returns:
             LLMTask object for tracking progress
@@ -263,7 +435,8 @@ class LLMManager:
             callback=callback,
             max_tokens=max_tokens,
             temperature=temperature,
-            task_id=task_id
+            task_id=task_id,
+            options=options
         )
 
         # Add to queue

@@ -186,3 +186,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - Inspired by various cognitive architectures and research in artificial general intelligence
 - Built using Ollama and LLM models for cognitive processing
+
+
+---
+*Built with AI assistance from [Claude (Anthropic)](https://claude.com/).*

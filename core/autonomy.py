@@ -126,18 +126,9 @@ class AutonomyModule:
             try:
                 current_time = time.time()
 
-                # Determine if it's time to generate a new thought
-                should_think = False
-
-                # Check if we've been idle for a while (no human interaction)
+                # Determine if it's time to generate a new thought (more often when idle)
                 idle_time = current_time - self.last_interaction_time
-                if idle_time > self.idle_threshold:
-                    # Increase thought frequency when idle
-                    adjusted_interval = max(5.0, self.thought_interval * (0.8 - (idle_time / 1000.0)))
-                    should_think = (current_time - self.last_thought_time) >= adjusted_interval
-                else:
-                    # Normal thought frequency
-                    should_think = (current_time - self.last_thought_time) >= self.thought_interval
+                should_think = (current_time - self.last_thought_time) >= self._thought_interval(idle_time)
 
                 # Check if we should perform metacognition
                 should_metacognize = (current_time - self.last_metacognition_time) >= self.metacognition_interval
@@ -165,6 +156,13 @@ class AutonomyModule:
                 import traceback
                 self.logger.error(traceback.format_exc())
                 time.sleep(1.0)  # Sleep longer on error
+
+    def _thought_interval(self, idle_time):
+        """Seconds between autonomous thoughts after `idle_time` seconds without human interaction."""
+        if idle_time > self.idle_threshold:
+            # Increase thought frequency when idle
+            return max(5.0, self.thought_interval * (0.8 - (idle_time / 1000.0)))
+        return self.thought_interval
 
     def _select_thinking_mode(self):
         """Select a thinking mode based on current state and needs."""
@@ -591,8 +589,23 @@ class AutonomyModule:
 
         # Consider both interest score and time since last explored
         current_time = time.time()
+        weights = self._topic_weights(current_time)
 
-        # Calculate adjusted scores considering time decay
+        if not weights:
+            # If no topics meet threshold, pick randomly from all
+            topic = random.choice(list(self.topics_of_interest.keys()))
+        else:
+            # Weighted random selection based on adjusted scores
+            topic = random.choices(list(weights.keys()), weights=list(weights.values()), k=1)[0]
+
+        # Update last explored timestamp
+        self.topic_last_explored[topic] = current_time
+
+        return topic
+
+    def _topic_weights(self, current_time):
+        """Selection probability of each topic at or above min_interest_threshold: interest score times
+        (1 + hours since last explored, capped at 1), normalised to sum to 1. Empty if no topic qualifies."""
         adjusted_scores = {}
         for topic, score in self.topics_of_interest.items():
             if score < self.min_interest_threshold:
@@ -604,25 +617,10 @@ class AutonomyModule:
 
             adjusted_scores[topic] = score * (1.0 + time_factor)
 
-        if not adjusted_scores:
-            # If no topics meet threshold, pick randomly from all
-            topic = random.choice(list(self.topics_of_interest.keys()))
-        else:
-            # Weighted random selection based on adjusted scores
-            topics = list(adjusted_scores.keys())
-            weights = list(adjusted_scores.values())
-
-            # Normalize weights
-            total = sum(weights)
-            if total > 0:
-                weights = [w/total for w in weights]
-
-            topic = random.choices(topics, weights=weights, k=1)[0]
-
-        # Update last explored timestamp
-        self.topic_last_explored[topic] = current_time
-
-        return topic
+        total = sum(adjusted_scores.values())
+        if total > 0:
+            adjusted_scores = {t: w / total for t, w in adjusted_scores.items()}
+        return adjusted_scores
 
     def _extract_content_from_malformed_json(self, json_str):
         """Extract content from malformed JSON using regex patterns."""

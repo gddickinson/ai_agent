@@ -249,15 +249,7 @@ class ConsciousnessModule:
         internal_state = self._get_cognition_state()
         curiosity = internal_state.get('emotions', {}).get('curiosity', 0)
 
-        # Base probability on curiosity level and idle time
-        base_probability = min(0.8, curiosity + (idle_time / (3600.0 * 3)))  # Max 80% chance
-
-        # Adjust based on time of day (more chatty during typical waking hours)
-        hour = time.localtime().tm_hour
-        if 9 <= hour <= 22:  # 9 AM to 10 PM
-            base_probability *= 1.5
-        else:
-            base_probability *= 0.5
+        base_probability = self._initiation_probability(curiosity, idle_time, time.localtime().tm_hour)
 
         # Make the decision
         if random.random() < base_probability:
@@ -266,6 +258,20 @@ class ConsciousnessModule:
         if should_initiate:
             self._initiate_conversation()
             self.last_initiation_time = current_time
+
+    @staticmethod
+    def _initiation_probability(curiosity, idle_time, hour):
+        """Chance per check of starting a conversation: curiosity plus idle hours / 3, capped at 0.8, then
+        x1.5 between 9:00 and 22:59 local time and x0.5 otherwise."""
+        # Base probability on curiosity level and idle time
+        base_probability = min(0.8, curiosity + (idle_time / (3600.0 * 3)))  # Max 80% chance
+
+        # Adjust based on time of day (more chatty during typical waking hours)
+        if 9 <= hour <= 22:  # 9 AM to 10 PM
+            base_probability *= 1.5
+        else:
+            base_probability *= 0.5
+        return base_probability
 
     def _initiate_conversation(self):
         """Initiate a conversation with the human."""

@@ -58,3 +58,19 @@ def test_question_starter_and_reflection_fallback(monkeypatch):
     a.questions = []
     a.initiate_conversation()
     assert 'recent reflection' in a.llm_manager.prompts[-1]
+
+
+def test_thought_interval_shortens_when_idle():
+    a = AutonomyModule({'thought_interval': 20.0, 'idle_threshold': 120.0}, FakeLLM(), FakeMemory(), None)
+    assert a._thought_interval(10) == 20.0
+    assert a._thought_interval(200) == pytest.approx(20.0 * (0.8 - 0.2))
+    assert a._thought_interval(5000) == 5.0
+
+
+def test_topic_weights_prefer_unexplored_topics():
+    a = module()
+    a.topics_of_interest = {'a': 0.8, 'b': 0.8, 'low': 0.1}
+    a.topic_last_explored = {'a': 10000.0}
+    w = a._topic_weights(10000.0 + 1800)  # 'a' explored 30 min ago, 'b' never
+    assert set(w) == {'a', 'b'} and sum(w.values()) == pytest.approx(1.0)
+    assert w['b'] / w['a'] == pytest.approx(2.0 / 1.5)

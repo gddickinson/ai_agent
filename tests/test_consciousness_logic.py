@@ -28,3 +28,9 @@ def test_initiation_waits_for_the_startup_delay():
     c.start_time = time.time() - c.initiative_startup_delay - 1
     c.process()
     assert c.can_initiate_conversation is True
+
+
+def test_initiation_probability():
+    p = ConsciousnessModule._initiation_probability
+    assert p(0.3, 0, 12) == 0.3 * 1.5
+    assert p(0.3, 3 * 3600, 3) == 0.8 * 0.5

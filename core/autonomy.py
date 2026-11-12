@@ -657,10 +657,10 @@ class AutonomyModule:
 
     def _update_topics_of_interest(self, topics):
         """Update interest scores for topics."""
-        for topic in topics:
-            # Normalize topic name
-            topic = topic.lower().replace(' ', '_')
+        # Normalize topic names (the decay step below compares against these)
+        topics = [topic.lower().replace(' ', '_') for topic in topics]
 
+        for topic in topics:
             # Update existing or add new
             if topic in self.topics_of_interest:
                 # Increase interest slightly (with decay over time)
@@ -837,6 +837,7 @@ class AutonomyModule:
         try:
             # Choose basis for conversation starter
             starter_type = random.choice(['topic', 'question', 'reflection'])
+            prompt = None
 
             if starter_type == 'topic' and self.topics_of_interest:
                 # Pick a high-interest topic
@@ -857,7 +858,7 @@ class AutonomyModule:
                 else:
                     starter_type = 'question'  # Fall back to question
 
-            if starter_type == 'question' and self.questions:
+            if prompt is None and starter_type == 'question' and self.questions:
                 # Pick a question to ask
                 question = random.choice(self.questions)
 
@@ -872,7 +873,8 @@ class AutonomyModule:
 
                 Response:
                 """
-            else:
+
+            if prompt is None:
                 # Generate a reflection-based starter
                 recent_memories = self.memory.retrieve_episodic_memories(limit=3)
                 memory_text = ""

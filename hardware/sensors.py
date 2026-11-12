@@ -410,6 +410,7 @@ class MicrophoneSensor(SensorInterface):
             # Implementation for real microphone would go here
             self.logger.warning(f"Real microphone not implemented, falling back to simulation")
             self.simulate = True
+            self.running = False  # let start() run again
             self.start()  # Restart with simulation
 
     def stop(self):
@@ -518,6 +519,7 @@ class GenericSensor(SensorInterface):
             # Implementation for real sensor would go here
             self.logger.warning(f"Real {self.type} sensor not implemented, falling back to simulation")
             self.simulate = True
+            self.running = False  # let start() run again
             self.start()  # Restart with simulation
 
     def stop(self):

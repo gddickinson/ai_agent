@@ -89,6 +89,7 @@ class DisplayActuator(ActuatorInterface):
             # Implementation for real display would go here
             self.logger.warning(f"Real display not implemented, falling back to simulation")
             self.simulate = True
+            self.running = False  # let start() run again
             self.start()  # Restart with simulation
     
     def stop(self):
@@ -203,6 +204,7 @@ class SpeakerActuator(ActuatorInterface):
             # Implementation for real speaker would go here
             self.logger.warning(f"Real speaker not implemented, falling back to simulation")
             self.simulate = True
+            self.running = False  # let start() run again
             self.start()  # Restart with simulation
     
     def stop(self):
@@ -317,6 +319,7 @@ class MotorActuator(ActuatorInterface):
             # Implementation for real motor would go here
             self.logger.warning(f"Real motor not implemented, falling back to simulation")
             self.simulate = True
+            self.running = False  # let start() run again
             self.start()  # Restart with simulation
     
     def stop(self):
@@ -429,6 +432,7 @@ class GenericActuator(ActuatorInterface):
             # Implementation for real actuator would go here
             self.logger.warning(f"Real {self.type} actuator not implemented, falling back to simulation")
             self.simulate = True
+            self.running = False  # let start() run again
             self.start()  # Restart with simulation
     
     def stop(self):

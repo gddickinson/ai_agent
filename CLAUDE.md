@@ -17,3 +17,9 @@ pytest tests/ -v
 - pyyaml (config loading)
 - requests (Ollama API communication)
 - Ollama must be running locally for LLM features
+
+## Web
+```bash
+pip install -r requirements-web.txt
+python run_web.py   # http://127.0.0.1:8132
+```

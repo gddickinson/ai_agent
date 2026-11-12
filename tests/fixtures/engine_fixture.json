@@ -1,0 +1,1820 @@
+{
+ "motor": {
+  "tick": 0.1,
+  "cases": {
+   "forward_then_stop": {
+    "steps": [
+     [
+      {
+       "command": "move",
+       "direction": "forward",
+       "speed": 0.5
+      },
+      6
+     ],
+     [
+      {
+       "command": "stop"
+      },
+      3
+     ]
+    ],
+    "states": [
+     [
+      0.5,
+      0.05,
+      null
+     ],
+     [
+      0.5,
+      0.1,
+      null
+     ],
+     [
+      0.5,
+      0.15000000000000002,
+      null
+     ],
+     [
+      0.5,
+      0.2,
+      null
+     ],
+     [
+      0.5,
+      0.25,
+      null
+     ],
+     [
+      0.5,
+      0.3,
+      null
+     ],
+     [
+      0.0,
+      0.3,
+      null
+     ],
+     [
+      0.0,
+      0.3,
+      null
+     ],
+     [
+      0.0,
+      0.3,
+      null
+     ]
+    ]
+   },
+   "backward": {
+    "steps": [
+     [
+      {
+       "command": "move",
+       "direction": "backward",
+       "speed": 0.8
+      },
+      5
+     ]
+    ],
+    "states": [
+     [
+      -0.8,
+      -0.08000000000000002,
+      null
+     ],
+     [
+      -0.8,
+      -0.16000000000000003,
+      null
+     ],
+     [
+      -0.8,
+      -0.24000000000000005,
+      null
+     ],
+     [
+      -0.8,
+      -0.32000000000000006,
+      null
+     ],
+     [
+      -0.8,
+      -0.4000000000000001,
+      null
+     ]
+    ]
+   },
+   "sideways_is_zero": {
+    "steps": [
+     [
+      {
+       "command": "move",
+       "direction": "left",
+       "speed": 0.8
+      },
+      3
+     ]
+    ],
+    "states": [
+     [
+      0.0,
+      0.0,
+      null
+     ],
+     [
+      0.0,
+      0.0,
+      null
+     ],
+     [
+      0.0,
+      0.0,
+      null
+     ]
+    ]
+   },
+   "position_overshoot": {
+    "steps": [
+     [
+      {
+       "command": "position",
+       "position": 0.33,
+       "speed": 0.7
+      },
+      8
+     ]
+    ],
+    "states": [
+     [
+      0.7,
+      0.06999999999999999,
+      0.33
+     ],
+     [
+      0.7,
+      0.13999999999999999,
+      0.33
+     ],
+     [
+      0.7,
+      0.20999999999999996,
+      0.33
+     ],
+     [
+      0.7,
+      0.27999999999999997,
+      0.33
+     ],
+     [
+      0.0,
+      0.33,
+      null
+     ],
+     [
+      0.0,
+      0.33,
+      null
+     ],
+     [
+      0.0,
+      0.33,
+      null
+     ],
+     [
+      0.0,
+      0.33,
+      null
+     ]
+    ]
+   },
+   "position_back": {
+    "steps": [
+     [
+      {
+       "command": "move",
+       "speed": 1.0
+      },
+      4
+     ],
+     [
+      {
+       "command": "position",
+       "position": -0.15,
+       "speed": 0.4
+      },
+      20
+     ]
+    ],
+    "states": [
+     [
+      1.0,
+      0.1,
+      null
+     ],
+     [
+      1.0,
+      0.2,
+      null
+     ],
+     [
+      1.0,
+      0.30000000000000004,
+      null
+     ],
+     [
+      1.0,
+      0.4,
+      null
+     ],
+     [
+      -0.4,
+      0.36,
+      -0.15
+     ],
+     [
+      -0.4,
+      0.31999999999999995,
+      -0.15
+     ],
+     [
+      -0.4,
+      0.2799999999999999,
+      -0.15
+     ],
+     [
+      -0.4,
+      0.2399999999999999,
+      -0.15
+     ],
+     [
+      -0.4,
+      0.1999999999999999,
+      -0.15
+     ],
+     [
+      -0.4,
+      0.1599999999999999,
+      -0.15
+     ],
+     [
+      -0.4,
+      0.11999999999999988,
+      -0.15
+     ],
+     [
+      -0.4,
+      0.07999999999999988,
+      -0.15
+     ],
+     [
+      -0.4,
+      0.03999999999999987,
+      -0.15
+     ],
+     [
+      -0.4,
+      -1.3877787807814457e-16,
+      -0.15
+     ],
+     [
+      -0.4,
+      -0.04000000000000015,
+      -0.15
+     ],
+     [
+      -0.4,
+      -0.08000000000000015,
+      -0.15
+     ],
+     [
+      -0.4,
+      -0.12000000000000016,
+      -0.15
+     ],
+     [
+      0.0,
+      -0.15,
+      null
+     ],
+     [
+      0.0,
+      -0.15,
+      null
+     ],
+     [
+      0.0,
+      -0.15,
+      null
+     ],
+     [
+      0.0,
+      -0.15,
+      null
+     ],
+     [
+      0.0,
+      -0.15,
+      null
+     ],
+     [
+      0.0,
+      -0.15,
+      null
+     ],
+     [
+      0.0,
+      -0.15,
+      null
+     ]
+    ]
+   },
+   "default_speed": {
+    "steps": [
+     [
+      {
+       "command": "move"
+      },
+      4
+     ]
+    ],
+    "states": [
+     [
+      0.5,
+      0.05,
+      null
+     ],
+     [
+      0.5,
+      0.1,
+      null
+     ],
+     [
+      0.5,
+      0.15000000000000002,
+      null
+     ],
+     [
+      0.5,
+      0.2,
+      null
+     ]
+    ]
+   }
+  }
+ },
+ "actuators": {
+  "mac": {
+   "actions": [
+    {
+     "action": [
+      "move",
+      "all",
+      {
+       "direction": "forward",
+       "speed": 0.6
+      }
+     ],
+     "success": false,
+     "queued": {}
+    },
+    {
+     "action": [
+      "move",
+      "left_wheel",
+      {
+       "direction": "backward"
+      }
+     ],
+     "success": false,
+     "queued": {}
+    },
+    {
+     "action": [
+      "move",
+      "forward",
+      {
+       "speed": 0.3
+      }
+     ],
+     "success": false,
+     "queued": {}
+    },
+    {
+     "action": [
+      "speak",
+      "all",
+      {
+       "text": "Hello there",
+       "volume": 0.5
+      }
+     ],
+     "success": true,
+     "queued": {
+      "speakers": [
+       {
+        "content": "Hello there",
+        "volume": 0.5,
+        "rate": 1.0
+       }
+      ]
+     }
+    },
+    {
+     "action": [
+      "speak",
+      "speakers",
+      {
+       "text": "On the mac speaker"
+      }
+     ],
+     "success": true,
+     "queued": {
+      "speakers": [
+       {
+        "content": "On the mac speaker",
+        "volume": 1.0,
+        "rate": 1.0
+       }
+      ]
+     }
+    },
+    {
+     "action": [
+      "display",
+      "all",
+      {
+       "text": "Status: OK"
+      }
+     ],
+     "success": true,
+     "queued": {
+      "screen": [
+       {
+        "content": "Status: OK",
+        "content_type": "text"
+       }
+      ]
+     }
+    },
+    {
+     "action": [
+      "display",
+      "screen",
+      {
+       "text": "Only the screen",
+       "content_type": "markdown"
+      }
+     ],
+     "success": true,
+     "queued": {
+      "screen": [
+       {
+        "content": "Only the screen",
+        "content_type": "markdown"
+       }
+      ]
+     }
+    },
+    {
+     "action": [
+      "position",
+      "right_wheel",
+      {
+       "position": 2.0,
+       "speed": 0.4
+      }
+     ],
+     "success": false,
+     "queued": {}
+    },
+    {
+     "action": [
+      "observe",
+      "room",
+      {}
+     ],
+     "success": false,
+     "queued": {}
+    }
+   ],
+   "communicate": [
+    {
+     "message": {
+      "id": "r1",
+      "content": "Hi!"
+     },
+     "success": true,
+     "queued": {
+      "screen": [
+       {
+        "content": "Hi!",
+        "content_type": "text",
+        "message_id": "r1"
+       }
+      ],
+      "speakers": [
+       {
+        "content": "Hi!",
+        "volume": 1.0,
+        "rate": 1.0
+       }
+      ]
+     }
+    },
+    {
+     "message": {
+      "id": "r2",
+      "content": "Quiet",
+      "speech_output": false
+     },
+     "success": true,
+     "queued": {
+      "screen": [
+       {
+        "content": "Quiet",
+        "content_type": "text",
+        "message_id": "r2"
+       }
+      ]
+     }
+    },
+    {
+     "message": {
+      "id": "r3",
+      "content": ""
+     },
+     "success": false,
+     "queued": {}
+    }
+   ],
+   "actuators": [
+    [
+     "screen",
+     "display",
+     "DisplayActuator"
+    ],
+    [
+     "speakers",
+     "speaker",
+     "SpeakerActuator"
+    ]
+   ]
+  },
+  "robot": {
+   "actions": [
+    {
+     "action": [
+      "move",
+      "all",
+      {
+       "direction": "forward",
+       "speed": 0.6
+      }
+     ],
+     "success": true,
+     "queued": {
+      "left_wheel": [
+       {
+        "command": "move",
+        "direction": "forward",
+        "speed": 0.6,
+        "priority": 50
+       }
+      ],
+      "right_wheel": [
+       {
+        "command": "move",
+        "direction": "forward",
+        "speed": 0.6,
+        "priority": 50
+       }
+      ]
+     }
+    },
+    {
+     "action": [
+      "move",
+      "left_wheel",
+      {
+       "direction": "backward"
+      }
+     ],
+     "success": true,
+     "queued": {
+      "left_wheel": [
+       {
+        "command": "move",
+        "direction": "backward",
+        "speed": 0.5,
+        "priority": 50
+       }
+      ]
+     }
+    },
+    {
+     "action": [
+      "move",
+      "forward",
+      {
+       "speed": 0.3
+      }
+     ],
+     "success": false,
+     "queued": {}
+    },
+    {
+     "action": [
+      "speak",
+      "all",
+      {
+       "text": "Hello there",
+       "volume": 0.5
+      }
+     ],
+     "success": true,
+     "queued": {
+      "speaker": [
+       {
+        "content": "Hello there",
+        "volume": 0.5,
+        "rate": 1.0
+       }
+      ]
+     }
+    },
+    {
+     "action": [
+      "speak",
+      "speakers",
+      {
+       "text": "On the mac speaker"
+      }
+     ],
+     "success": false,
+     "queued": {}
+    },
+    {
+     "action": [
+      "display",
+      "all",
+      {
+       "text": "Status: OK"
+      }
+     ],
+     "success": true,
+     "queued": {
+      "screen": [
+       {
+        "content": "Status: OK",
+        "content_type": "text"
+       }
+      ]
+     }
+    },
+    {
+     "action": [
+      "display",
+      "screen",
+      {
+       "text": "Only the screen",
+       "content_type": "markdown"
+      }
+     ],
+     "success": true,
+     "queued": {
+      "screen": [
+       {
+        "content": "Only the screen",
+        "content_type": "markdown"
+       }
+      ]
+     }
+    },
+    {
+     "action": [
+      "position",
+      "right_wheel",
+      {
+       "position": 2.0,
+       "speed": 0.4
+      }
+     ],
+     "success": true,
+     "queued": {
+      "right_wheel": [
+       {
+        "command": "position",
+        "position": 2.0,
+        "speed": 0.4,
+        "priority": 50
+       }
+      ]
+     }
+    },
+    {
+     "action": [
+      "observe",
+      "room",
+      {}
+     ],
+     "success": false,
+     "queued": {}
+    }
+   ],
+   "communicate": [
+    {
+     "message": {
+      "id": "r1",
+      "content": "Hi!"
+     },
+     "success": true,
+     "queued": {
+      "screen": [
+       {
+        "content": "Hi!",
+        "content_type": "text",
+        "message_id": "r1"
+       }
+      ],
+      "speaker": [
+       {
+        "content": "Hi!",
+        "volume": 1.0,
+        "rate": 1.0
+       }
+      ]
+     }
+    },
+    {
+     "message": {
+      "id": "r2",
+      "content": "Quiet",
+      "speech_output": false
+     },
+     "success": true,
+     "queued": {
+      "screen": [
+       {
+        "content": "Quiet",
+        "content_type": "text",
+        "message_id": "r2"
+       }
+      ]
+     }
+    },
+    {
+     "message": {
+      "id": "r3",
+      "content": ""
+     },
+     "success": false,
+     "queued": {}
+    }
+   ],
+   "actuators": [
+    [
+     "screen",
+     "display",
+     "DisplayActuator"
+    ],
+    [
+     "speaker",
+     "speaker",
+     "SpeakerActuator"
+    ],
+    [
+     "left_wheel",
+     "motor",
+     "MotorActuator"
+    ],
+    [
+     "right_wheel",
+     "motor",
+     "MotorActuator"
+    ]
+   ]
+  }
+ },
+ "sensors": {
+  "mac": [
+   {
+    "name": "webcam",
+    "type": "camera",
+    "class": "CameraSensor",
+    "interval": 1.0,
+    "simulate": false,
+    "simulate_data": [
+     "A desk with a MacBook Pro, an external monitor, and a coffee mug. The code editor is open on the screen.",
+     "A home office with a desk, computer, bookshelf, and window. Natural light coming through the window.",
+     "A person sitting at a desk, typing on a keyboard while looking at a computer screen.",
+     "An empty desk with just a computer, the screen shows a terminal window with logs scrolling by."
+    ]
+   },
+   {
+    "name": "microphone",
+    "type": "microphone",
+    "class": "MicrophoneSensor",
+    "interval": 3.0,
+    "simulate": true,
+    "simulate_data": [
+     "Hello, agent. Can you hear me?",
+     "What's the current status of the system?",
+     "Run a diagnostic check please.",
+     "Tell me what you're currently thinking about.",
+     "What's your current emotional state?"
+    ]
+   }
+  ],
+  "robot": [
+   {
+    "name": "camera",
+    "type": "camera",
+    "class": "CameraSensor",
+    "interval": 1.0,
+    "simulate": true,
+    "simulate_data": [
+     "A desk with a computer and some papers.",
+     "A person sitting at a desk, working on a computer.",
+     "An empty room with white walls and a window."
+    ]
+   },
+   {
+    "name": "microphone",
+    "type": "microphone",
+    "class": "MicrophoneSensor",
+    "interval": 2.0,
+    "simulate": true,
+    "simulate_data": [
+     "Hello, can you hear me?",
+     "What's the weather like today?",
+     "I need some help with a problem.",
+     "This is a test of the audio system.",
+     ""
+    ]
+   },
+   {
+    "name": "lidar",
+    "type": "lidar",
+    "class": "GenericSensor",
+    "interval": 1.0,
+    "simulate": true,
+    "simulate_data": null,
+    "min": 0,
+    "max": 100,
+    "unit": ""
+   },
+   {
+    "name": "temperature",
+    "type": "temperature",
+    "class": "GenericSensor",
+    "interval": 10.0,
+    "simulate": true,
+    "simulate_data": null,
+    "min": 15.0,
+    "max": 30.0,
+    "unit": "\u00b0C"
+   },
+   {
+    "name": "battery",
+    "type": "battery",
+    "class": "GenericSensor",
+    "interval": 30.0,
+    "simulate": true,
+    "simulate_data": null,
+    "min": 0.0,
+    "max": 100.0,
+    "unit": "%"
+   }
+  ]
+ },
+ "working_memory": {
+  "capacity": 5,
+  "adds": [
+   [
+    "a",
+    0.5
+   ],
+   [
+    "b",
+    0.8
+   ],
+   [
+    "c",
+    0.3
+   ],
+   [
+    "d",
+    0.8
+   ],
+   [
+    "e",
+    0.6
+   ],
+   [
+    "f",
+    0.45
+   ],
+   [
+    "g",
+    0.9
+   ],
+   [
+    "h",
+    0.2
+   ],
+   [
+    "i",
+    0.7
+   ],
+   [
+    "j",
+    0.5
+   ]
+  ],
+  "snapshots": [
+   [
+    "a"
+   ],
+   [
+    "b",
+    "a"
+   ],
+   [
+    "b",
+    "a",
+    "c"
+   ],
+   [
+    "b",
+    "d",
+    "a",
+    "c"
+   ],
+   [
+    "b",
+    "d",
+    "e",
+    "a",
+    "c"
+   ],
+   [
+    "b",
+    "d",
+    "e",
+    "a",
+    "f"
+   ],
+   [
+    "g",
+    "b",
+    "d",
+    "e",
+    "a"
+   ],
+   [
+    "g",
+    "b",
+    "d",
+    "e",
+    "a"
+   ],
+   [
+    "g",
+    "b",
+    "d",
+    "i",
+    "e"
+   ],
+   [
+    "g",
+    "b",
+    "d",
+    "i",
+    "e"
+   ]
+  ],
+  "spilled": [
+   "f",
+   "a",
+   "j"
+  ]
+ },
+ "autonomy": {
+  "default_topics": {
+   "self_awareness": 0.8,
+   "human_interaction": 0.7,
+   "environment": 0.6,
+   "learning": 0.9,
+   "memory_systems": 0.7,
+   "problem_solving": 0.6,
+   "creativity": 0.5,
+   "emotions": 0.6
+  },
+  "updates": [
+   [
+    "Learning",
+    "Robotics"
+   ],
+   [
+    "robotics",
+    "emotions"
+   ],
+   [],
+   [
+    "Machine Learning"
+   ],
+   [
+    "robotics"
+   ],
+   [
+    "robotics"
+   ],
+   [
+    "robotics"
+   ]
+  ],
+  "after": [
+   {
+    "self_awareness": 0.792,
+    "human_interaction": 0.693,
+    "environment": 0.594,
+    "learning": 1.0,
+    "memory_systems": 0.693,
+    "problem_solving": 0.594,
+    "creativity": 0.495,
+    "emotions": 0.594,
+    "robotics": 0.5
+   },
+   {
+    "self_awareness": 0.78408,
+    "human_interaction": 0.68607,
+    "environment": 0.5880599999999999,
+    "learning": 0.99,
+    "memory_systems": 0.68607,
+    "problem_solving": 0.5880599999999999,
+    "creativity": 0.49005,
+    "emotions": 0.694,
+    "robotics": 0.6
+   },
+   {
+    "self_awareness": 0.7762392,
+    "human_interaction": 0.6792092999999999,
+    "environment": 0.5821793999999999,
+    "learning": 0.9801,
+    "memory_systems": 0.6792092999999999,
+    "problem_solving": 0.5821793999999999,
+    "creativity": 0.48514949999999996,
+    "emotions": 0.6870599999999999,
+    "robotics": 0.594
+   },
+   {
+    "self_awareness": 0.768476808,
+    "human_interaction": 0.6724172069999999,
+    "environment": 0.5763576059999999,
+    "learning": 0.9702989999999999,
+    "memory_systems": 0.6724172069999999,
+    "problem_solving": 0.5763576059999999,
+    "creativity": 0.480298005,
+    "emotions": 0.6801893999999998,
+    "robotics": 0.5880599999999999,
+    "machine_learning": 0.5
+   },
+   {
+    "self_awareness": 0.76079203992,
+    "human_interaction": 0.6656930349299999,
+    "environment": 0.5705940299399999,
+    "learning": 0.96059601,
+    "memory_systems": 0.6656930349299999,
+    "problem_solving": 0.5705940299399999,
+    "creativity": 0.47549502494999996,
+    "emotions": 0.6733875059999999,
+    "robotics": 0.6880599999999999,
+    "machine_learning": 0.495
+   },
+   {
+    "self_awareness": 0.7531841195208,
+    "human_interaction": 0.6590361045806998,
+    "environment": 0.5648880896405999,
+    "learning": 0.9509900498999999,
+    "memory_systems": 0.6590361045806998,
+    "problem_solving": 0.5648880896405999,
+    "creativity": 0.47074007470049994,
+    "emotions": 0.6666536309399999,
+    "robotics": 0.7880599999999999,
+    "machine_learning": 0.49005
+   },
+   {
+    "self_awareness": 0.745652278325592,
+    "human_interaction": 0.6524457435348928,
+    "environment": 0.5592392087441939,
+    "learning": 0.9414801494009999,
+    "memory_systems": 0.6524457435348928,
+    "problem_solving": 0.5592392087441939,
+    "creativity": 0.46603267395349496,
+    "emotions": 0.6599870946305999,
+    "robotics": 0.8880599999999998,
+    "machine_learning": 0.48514949999999996
+   }
+  ],
+  "decay_start": {
+   "x": 0.25,
+   "y": 0.9
+  },
+  "decay": [
+   {
+    "x": 0.2475,
+    "y": 1.0
+   },
+   {
+    "x": 0.245025,
+    "y": 1.0
+   },
+   {
+    "x": 0.24257474999999998,
+    "y": 1.0
+   },
+   {
+    "x": 0.2401490025,
+    "y": 1.0
+   },
+   {
+    "x": 0.23774751247499998,
+    "y": 1.0
+   },
+   {
+    "x": 0.23537003735024997,
+    "y": 1.0
+   },
+   {
+    "x": 0.23301633697674748,
+    "y": 1.0
+   },
+   {
+    "x": 0.23068617360698,
+    "y": 1.0
+   },
+   {
+    "x": 0.22837931187091018,
+    "y": 1.0
+   },
+   {
+    "x": 0.22609551875220107,
+    "y": 1.0
+   },
+   {
+    "x": 0.22383456356467907,
+    "y": 1.0
+   },
+   {
+    "x": 0.22159621792903228,
+    "y": 1.0
+   },
+   {
+    "x": 0.21938025574974196,
+    "y": 1.0
+   },
+   {
+    "x": 0.21718645319224453,
+    "y": 1.0
+   },
+   {
+    "x": 0.21501458866032208,
+    "y": 1.0
+   },
+   {
+    "x": 0.21286444277371885,
+    "y": 1.0
+   },
+   {
+    "x": 0.21073579834598166,
+    "y": 1.0
+   },
+   {
+    "x": 0.20862844036252184,
+    "y": 1.0
+   },
+   {
+    "x": 0.20654215595889663,
+    "y": 1.0
+   },
+   {
+    "x": 0.20447673439930766,
+    "y": 1.0
+   },
+   {
+    "x": 0.20243196705531458,
+    "y": 1.0
+   },
+   {
+    "x": 0.20040764738476144,
+    "y": 1.0
+   },
+   {
+    "y": 1.0
+   },
+   {
+    "y": 1.0
+   },
+   {
+    "y": 1.0
+   },
+   {
+    "y": 1.0
+   },
+   {
+    "y": 1.0
+   },
+   {
+    "y": 1.0
+   },
+   {
+    "y": 1.0
+   },
+   {
+    "y": 1.0
+   }
+  ],
+  "weights": [
+   {
+    "now": 5000.0,
+    "explored": {},
+    "weights": {
+     "self_awareness": 0.14814814814814814,
+     "human_interaction": 0.12962962962962962,
+     "environment": 0.1111111111111111,
+     "learning": 0.16666666666666666,
+     "memory_systems": 0.12962962962962962,
+     "problem_solving": 0.1111111111111111,
+     "creativity": 0.09259259259259259,
+     "emotions": 0.1111111111111111
+    }
+   },
+   {
+    "now": 5000.0,
+    "explored": {
+     "learning": 4000.0,
+     "creativity": 0.0
+    },
+    "weights": {
+     "self_awareness": 0.15763546798029557,
+     "human_interaction": 0.13793103448275862,
+     "environment": 0.11822660098522167,
+     "learning": 0.11330049261083742,
+     "memory_systems": 0.13793103448275862,
+     "problem_solving": 0.11822660098522167,
+     "creativity": 0.09852216748768472,
+     "emotions": 0.11822660098522167
+    }
+   },
+   {
+    "now": 100.0,
+    "explored": {
+     "self_awareness": 90.0
+    },
+    "weights": {
+     "self_awareness": 0.14506730962427167,
+     "human_interaction": 0.130098452883263,
+     "environment": 0.11151295961422543,
+     "learning": 0.16726943942133815,
+     "memory_systems": 0.130098452883263,
+     "problem_solving": 0.11151295961422543,
+     "creativity": 0.09292746634518786,
+     "emotions": 0.11151295961422543
+    }
+   },
+   {
+    "now": 10.0,
+    "explored": {},
+    "topics": {
+     "x": 0.1
+    },
+    "weights": {}
+   }
+  ],
+  "min_interest_threshold": 0.4,
+  "thought_interval": 20.0,
+  "idle_threshold": 120.0,
+  "intervals": [
+   [
+    0,
+    20.0
+   ],
+   [
+    60,
+    20.0
+   ],
+   [
+    120,
+    20.0
+   ],
+   [
+    121,
+    13.580000000000002
+   ],
+   [
+    300,
+    10.0
+   ],
+   [
+    600,
+    5.0
+   ],
+   [
+    700,
+    5.0
+   ],
+   [
+    1000,
+    5.0
+   ],
+   [
+    5000,
+    5.0
+   ]
+  ],
+  "modes": [
+   [
+    {
+     "curiosity": 0.7
+    },
+    "exploratory"
+   ],
+   [
+    {
+     "curiosity": 0.6,
+     "confusion": 0.65
+    },
+    "analytical"
+   ],
+   [
+    {
+     "joy": 0.9
+    },
+    "creative"
+   ],
+   [
+    {
+     "sadness": 0.45
+    },
+    "reflective"
+   ],
+   [
+    {
+     "fear": 0.5,
+     "joy": 0.61
+    },
+    "creative"
+   ],
+   [
+    {
+     "confusion": 0.2
+    },
+    "predictive"
+   ],
+   [
+    {
+     "curiosity": 0.61,
+     "joy": 0.99
+    },
+    "exploratory"
+   ]
+  ]
+ },
+ "cognition": {
+  "parsed": [
+   [
+    "{\"joy\": 0.7, \"sadness\": 0.1, \"anger\": 0, \"fear\": 0.2, \"surprise\": 0.4, \"curiosity\": 0.9, \"confusion\": 0.1}",
+    {
+     "joy": 0.7,
+     "sadness": 0.1,
+     "anger": 0.0,
+     "fear": 0.2,
+     "surprise": 0.4,
+     "curiosity": 0.9,
+     "confusion": 0.1
+    }
+   ],
+   [
+    "Here is my state: {\"joy\": 1.5, \"curiosity\": \"0.3\", \"fear\": -2, \"anger\": \"high\"} hope that helps",
+    {
+     "joy": 1.0,
+     "sadness": 0.0,
+     "anger": 0.0,
+     "fear": 0.0,
+     "surprise": 0.0,
+     "curiosity": 0.3,
+     "confusion": 0.0
+    }
+   ],
+   [
+    "{\"joy\": 0.2}",
+    {
+     "joy": 0.2,
+     "sadness": 0.0,
+     "anger": 0.0,
+     "fear": 0.0,
+     "surprise": 0.0,
+     "curiosity": 0.0,
+     "confusion": 0.0
+    }
+   ]
+  ]
+ },
+ "consciousness": {
+  "initiation": [
+   [
+    0.0,
+    0,
+    3,
+    0.0
+   ],
+   [
+    0.0,
+    0,
+    9,
+    0.0
+   ],
+   [
+    0.0,
+    0,
+    22,
+    0.0
+   ],
+   [
+    0.0,
+    0,
+    23,
+    0.0
+   ],
+   [
+    0.0,
+    900,
+    3,
+    0.041666666666666664
+   ],
+   [
+    0.0,
+    900,
+    9,
+    0.125
+   ],
+   [
+    0.0,
+    900,
+    22,
+    0.125
+   ],
+   [
+    0.0,
+    900,
+    23,
+    0.041666666666666664
+   ],
+   [
+    0.0,
+    7200,
+    3,
+    0.3333333333333333
+   ],
+   [
+    0.0,
+    7200,
+    9,
+    1.0
+   ],
+   [
+    0.0,
+    7200,
+    22,
+    1.0
+   ],
+   [
+    0.0,
+    7200,
+    23,
+    0.3333333333333333
+   ],
+   [
+    0.0,
+    30000,
+    3,
+    0.4
+   ],
+   [
+    0.0,
+    30000,
+    9,
+    1.2000000000000002
+   ],
+   [
+    0.0,
+    30000,
+    22,
+    1.2000000000000002
+   ],
+   [
+    0.0,
+    30000,
+    23,
+    0.4
+   ],
+   [
+    0.3,
+    0,
+    3,
+    0.15
+   ],
+   [
+    0.3,
+    0,
+    9,
+    0.44999999999999996
+   ],
+   [
+    0.3,
+    0,
+    22,
+    0.44999999999999996
+   ],
+   [
+    0.3,
+    0,
+    23,
+    0.15
+   ],
+   [
+    0.3,
+    900,
+    3,
+    0.19166666666666665
+   ],
+   [
+    0.3,
+    900,
+    9,
+    0.575
+   ],
+   [
+    0.3,
+    900,
+    22,
+    0.575
+   ],
+   [
+    0.3,
+    900,
+    23,
+    0.19166666666666665
+   ],
+   [
+    0.3,
+    7200,
+    3,
+    0.4
+   ],
+   [
+    0.3,
+    7200,
+    9,
+    1.2000000000000002
+   ],
+   [
+    0.3,
+    7200,
+    22,
+    1.2000000000000002
+   ],
+   [
+    0.3,
+    7200,
+    23,
+    0.4
+   ],
+   [
+    0.3,
+    30000,
+    3,
+    0.4
+   ],
+   [
+    0.3,
+    30000,
+    9,
+    1.2000000000000002
+   ],
+   [
+    0.3,
+    30000,
+    22,
+    1.2000000000000002
+   ],
+   [
+    0.3,
+    30000,
+    23,
+    0.4
+   ],
+   [
+    0.8,
+    0,
+    3,
+    0.4
+   ],
+   [
+    0.8,
+    0,
+    9,
+    1.2000000000000002
+   ],
+   [
+    0.8,
+    0,
+    22,
+    1.2000000000000002
+   ],
+   [
+    0.8,
+    0,
+    23,
+    0.4
+   ],
+   [
+    0.8,
+    900,
+    3,
+    0.4
+   ],
+   [
+    0.8,
+    900,
+    9,
+    1.2000000000000002
+   ],
+   [
+    0.8,
+    900,
+    22,
+    1.2000000000000002
+   ],
+   [
+    0.8,
+    900,
+    23,
+    0.4
+   ],
+   [
+    0.8,
+    7200,
+    3,
+    0.4
+   ],
+   [
+    0.8,
+    7200,
+    9,
+    1.2000000000000002
+   ],
+   [
+    0.8,
+    7200,
+    22,
+    1.2000000000000002
+   ],
+   [
+    0.8,
+    7200,
+    23,
+    0.4
+   ],
+   [
+    0.8,
+    30000,
+    3,
+    0.4
+   ],
+   [
+    0.8,
+    30000,
+    9,
+    1.2000000000000002
+   ],
+   [
+    0.8,
+    30000,
+    22,
+    1.2000000000000002
+   ],
+   [
+    0.8,
+    30000,
+    23,
+    0.4
+   ]
+  ],
+  "messages": [
+   {
+    "text": "Hello, my name is Alice and I am 34 years old.",
+    "facts": [
+     [
+      "user:human",
+      "age",
+      "34"
+     ]
+    ],
+    "users": [
+     [
+      "human",
+      "Alice"
+     ]
+    ]
+   },
+   {
+    "text": "I'm from Glasgow, Scotland. I like hiking and tea",
+    "facts": [
+     [
+      "user:human",
+      "location",
+      "Glasgow, Scotland"
+     ],
+     [
+      "user:human",
+      "likes",
+      "hiking and tea"
+     ]
+    ],
+    "users": []
+   },
+   {
+    "text": "my age is 51",
+    "facts": [
+     [
+      "user:human",
+      "age",
+      "51"
+     ],
+     [
+      "user:human",
+      "age",
+      "51"
+     ]
+    ],
+    "users": []
+   },
+   {
+    "text": "I hate rain",
+    "facts": [
+     [
+      "user:human",
+      "dislikes",
+      "rain"
+     ]
+    ],
+    "users": []
+   },
+   {
+    "text": "I don't like loud noise. Peter says hi",
+    "facts": [
+     [
+      "user:human",
+      "dislikes",
+      "loud noise"
+     ]
+    ],
+    "users": [
+     [
+      "human",
+      "Peter"
+     ]
+    ]
+   },
+   {
+    "text": "What do you see?",
+    "facts": [],
+    "users": []
+   },
+   {
+    "text": "I'm in London",
+    "facts": [
+     [
+      "user:human",
+      "location",
+      "London"
+     ]
+    ],
+    "users": []
+   },
+   {
+    "text": "My name is bob",
+    "facts": [],
+    "users": [
+     [
+      "human",
+      "Bob"
+     ]
+    ]
+   }
+  ]
+ }
+}

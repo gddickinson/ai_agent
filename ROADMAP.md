@@ -17,7 +17,7 @@ A modular cognitive architecture for embodied AI agents using Ollama LLMs. Core 
 - [ ] Add support for additional LLM providers beyond Ollama (OpenAI, Anthropic) in `llm/manager.py`
 - [ ] Implement persistent memory storage (SQLite or similar) instead of in-memory only
 - [ ] Add conversation history export/import in `enhanced_chat.py`
-- [ ] Build a web-based dashboard alternative to the Tkinter `agent_gui.py`
+- [x] Build a web-based dashboard alternative to the Tkinter `agent_gui.py` (`run_web.py`, `web/`)
 - [ ] Add emotion visualization and memory timeline in the GUI
 - [ ] Implement rate limiting and token counting in `llm/manager.py`
 - [ ] Add audio input/output support in `hardware/sensors.py` and `hardware/actuators.py`
@@ -36,4 +36,4 @@ A modular cognitive architecture for embodied AI agents using Ollama LLMs. Core 
 - [x] Several `__init__.py` files are likely empty -- add proper exports and docstrings
 - [ ] The `memory/` directory mixes data storage with code concerns -- separate data dirs from source
 - [x] `agent_gui.py` at root should move into `gui/` package for consistency
-- [ ] No CI/CD pipeline -- add GitHub Actions for linting and testing
+- [x] No CI/CD pipeline -- GitHub Actions runs `pytest tests` and publishes the static site (`.github/workflows/pages.yml`)

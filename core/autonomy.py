@@ -12,6 +12,19 @@ import queue
 from typing import Dict, Any, List, Optional
 import re
 
+# Topics of interest (score 0-1) the agent starts with each time the module starts
+DEFAULT_TOPICS = {
+    "self_awareness": 0.8,
+    "human_interaction": 0.7,
+    "environment": 0.6,
+    "learning": 0.9,
+    "memory_systems": 0.7,
+    "problem_solving": 0.6,
+    "creativity": 0.5,
+    "emotions": 0.6
+}
+
+
 class AutonomyModule:
     """
     Implements the autonomous thinking capabilities of the agent, including
@@ -90,16 +103,7 @@ class AutonomyModule:
         self.running = True
 
         # Initialize topics of interest with some defaults
-        self.topics_of_interest = {
-            "self_awareness": 0.8,
-            "human_interaction": 0.7,
-            "environment": 0.6,
-            "learning": 0.9,
-            "memory_systems": 0.7,
-            "problem_solving": 0.6,
-            "creativity": 0.5,
-            "emotions": 0.6
-        }
+        self.topics_of_interest = dict(DEFAULT_TOPICS)
 
         # Start the autonomous thinking thread
         self.autonomous_thinking_thread = threading.Thread(

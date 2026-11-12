@@ -1,0 +1,39 @@
+/* Embodied AI Agent accents (cyan sensor / violet mind / amber action) and page styles; shared theme is style.css. */
+:root { --accent:#36e2ff; --accent2:#b07cff; --accent3:#ffb347; --glow:rgba(54,226,255,.13); }
+button, .btn { color:#021018; }
+.mark { box-shadow:0 0 12px var(--accent), inset 0 0 0 4px var(--bg), inset 0 0 0 9px var(--accent2); }
+.bar { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:6px 0; }
+.bar > button, .bar .seg { margin:0; }
+.bar > button { padding:7px 11px; }
+.simhead { display:flex; flex-wrap:wrap; gap:10px 24px; align-items:flex-end; justify-content:space-between; }
+.simhead h1 { margin-bottom:0; }
+main:has(.world) { max-width:1400px; }
+.world { display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:14px; align-items:start; margin-top:8px; }
+.world .panel, .three .panel { margin:0 0 12px; padding:12px 14px; }
+.side-panels h3, .three h3, .ctlpanel h3 { margin-top:2px; }
+.ctlpanel { margin-top:12px !important; }
+.ctlpanel .row button { margin:0; }
+table.tight td, table.tight th { padding:4px 6px; font-size:13px; }
+.bar-row { display:grid; grid-template-columns:120px 1fr 42px; gap:8px; align-items:center; font-size:13px; margin:3px 0; }
+.bar-row i { display:block; height:8px; border-radius:4px; background:linear-gradient(90deg, var(--accent2) var(--v), rgba(255,255,255,.07) var(--v)); }
+.bar-row b { font:12px var(--mono); text-align:right; } .bar-row.dim { opacity:.45; }
+ol.wm { margin:0; padding-left:20px; font-size:13px; max-height:330px; overflow:auto; } ol.wm li { margin:3px 0; }
+.mono-log { max-height:220px; overflow:auto; font-size:12px; margin:0; }
+ul.events { list-style:none; padding:0; margin:0; font-size:13px; max-height:380px; overflow:auto; } ul.events li { margin:4px 0; }
+.chat { max-height:220px; overflow:auto; } .msg { margin:4px 0; font-size:14px; }
+.msg.human b { color:var(--accent); } .msg.agent b { color:var(--accent3); }
+.diagram { width:100%; height:auto; display:block; }
+.diagram text { font:13px var(--mono); fill:var(--ink); } .diagram .sub { font-size:11px; fill:var(--mute); }
+.diagram .box { fill:rgba(12,16,32,.95); stroke:var(--line); stroke-width:1.5; }
+.diagram .box.s { stroke:var(--accent); } .diagram .box.m { stroke:var(--accent2); } .diagram .box.a { stroke:var(--accent3); }
+.diagram .edge { stroke:#5d6b94; stroke-width:1.6; fill:none; marker-end:url(#arrow); }
+.diagram .edge.llm { stroke:var(--accent2); stroke-dasharray:4 4; }
+.mods td:first-child { white-space:nowrap; }
+.kv { display:grid; grid-template-columns:max-content 1fr; gap:4px 14px; font-size:14px; } .kv dt { color:var(--mute); } .kv dd { margin:0; font-family:var(--mono); }
+.status-dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--bad); margin-right:6px; }
+.status-dot.up { background:var(--good); box-shadow:0 0 8px var(--good); }
+@media (max-width:1100px) { .world { grid-template-columns:minmax(0,1fr); } }
+@media (max-width:760px) {
+  .bar-row { grid-template-columns:96px 1fr 38px; }
+  .ctlpanel .row > div { min-width:100%; }
+}

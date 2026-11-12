@@ -10,3 +10,7 @@ memory/output/display.txt
 /hardware/__pycache__
 /core/__pycache__
 /utils/__pycache__
+
+# static site build
+site/
+__pycache__/

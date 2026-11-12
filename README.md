@@ -190,3 +190,40 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ---
 *Built with AI assistance from [Claude (Anthropic)](https://claude.com/).*
+
+## Web interface and static site
+
+**Live:** https://gddickinson.github.io/ai_agent/ (published from `main` by `.github/workflows/pages.yml`)
+
+| Simulated world | Modules & data flow | Cognition & autonomy |
+|---|---|---|
+| ![Simulated world](docs/img/world.png) | ![Architecture](docs/img/architecture.png) | ![Cognition and autonomy](docs/img/mind.png) |
+
+The static site never calls an LLM. Its **simulated world** runs JavaScript ports of the framework's non-LLM logic:
+the simulated sensors, per-type perception intervals, working memory, emotion parsing and drift, thinking-mode and
+topic-interest rules, conversation-initiation odds, regex fact extraction, the simulated motor model and
+`ActuatorManager` routing. Node tests (`web/static/*.test.mjs`) hold each port to values computed by the Python code
+(`scripts/make_engine_fixture.py` → `tests/fixtures/engine_fixture.json`). Where the agent would prompt Ollama, the
+simulator counts the prompt and takes the repo's own no-LLM path (fallback reply, fallback conversation starter). The
+room and the robot's pose are drawn from the two wheel motors' positions; the repo itself models each motor in 1-D.
+The architecture pages are generated from the code (modules parsed with `ast`, the schema created by `MemoryManager`,
+defaults read from the modules).
+
+### Run the web app
+
+```bash
+pip install -r requirements-web.txt
+python run_web.py            # http://127.0.0.1:8132
+```
+
+Locally, the **Dashboard** starts the real `EmbodiedAgent` (all sensors forced to simulation), lets you chat with it
+and send actions, shows its monologue, emotions, topics, working memory and LLM queue, checks which configured models
+your Ollama server has, browses `memory/memory.db` (read-only) and tails the display/speaker output files. LLM calls go
+only to the `api_base` in `config.yaml` (localhost). None of the memory database or logs is exported to the static site.
+
+```bash
+python -m pytest -q tests                       # unit + web tests (no hardware, no network)
+python scripts/make_engine_fixture.py           # after changing the ported logic
+python scripts/build_static.py --out site       # static site
+python scripts/screenshots.py --static "" world  # browser smoke test
+```

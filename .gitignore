@@ -13,3 +13,9 @@ memory/output/*.txt
 # static site build
 site/
 __pycache__/
+
+# Camera snapshots (GUI "Snapshot" saves snapshot_<time>.jpg in the working dir; camera test scripts): personal, never published
+_archive/snapshot_*.jpg
+snapshot_*.jpg
+camera_frame.jpg
+test_image.jpg

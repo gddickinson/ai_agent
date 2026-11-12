@@ -14,10 +14,11 @@ import json
 import os
 import base64
 import random
-import numpy as np
-from PIL import Image
-import io
-import cv2
+
+try:  # OpenCV is only needed for a real camera; simulated sensors work without it
+    import cv2
+except ImportError:  # pragma: no cover - depends on the environment
+    cv2 = None
 
 class SensorInterface(ABC):
     """Base class for sensor interfaces."""
@@ -106,6 +107,9 @@ class CameraSensor:
         if self.simulate:
             # Start simulation thread
             self.logger.info(f"Starting simulated camera: {self.name}")
+        elif cv2 is None:
+            self.logger.warning("OpenCV (cv2) is not installed, falling back to simulation mode")
+            self.simulate = True
         else:
             # Initialize the camera
             try:
@@ -336,6 +340,10 @@ class CameraSensor:
             'errors': [],
             'messages': []
         }
+
+        if cv2 is None:
+            test_results['errors'].append("OpenCV (cv2) is not installed")
+            return test_results
 
         try:
             # Try to open the camera

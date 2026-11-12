@@ -380,6 +380,13 @@ class LLMManager:
                     task.result = result
                     task.completed = True
 
+                    # A result carrying 'error' (server unreachable, timeout) is a failure: callers get
+                    # (None, task) with task.error set and take their fallback path instead of using the
+                    # explanatory text as if the model had said it
+                    if isinstance(result, dict) and result.get('error'):
+                        task.error = result['error']
+                        result = None
+
                     # Call callback if provided
                     if task.callback:
                         task.callback(result, task)

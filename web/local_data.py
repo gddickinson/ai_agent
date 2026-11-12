@@ -11,7 +11,7 @@ import requests
 
 from web.introspect import ROOT, load_config
 
-TABLES = ["perceptions", "episodic_memories", "episodic_memory", "facts", "semantic_memories", "semantic_memory",
+TABLES = ["perceptions", "episodic_memory", "facts", "semantic_memories", "semantic_memory",
           "users", "conversations"]
 
 

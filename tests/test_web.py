@@ -57,7 +57,7 @@ def test_js_engine():
 def test_info_counts_come_from_the_code():
     i = client.get("/api/info").json()
     assert i["platforms"] == ["mac", "robot"] and i["sensors"]["robot"] == 5 and i["actuators"]["robot"] == 4
-    assert i["tables"] == 8 and i["emotions"] == 7 and i["thinking_modes"] == 6
+    assert i["tables"] == 7 and i["emotions"] == 7 and i["thinking_modes"] == 6
 
 
 def test_defaults_match_the_modules():

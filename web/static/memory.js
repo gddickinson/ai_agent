@@ -29,18 +29,20 @@ route('memory', async () => {
       readings also go to the <code>perceptions</code> table.</p>
       <h3>Long-term</h3>
       <p class="small"><b>Episodic</b>: timestamped episodes (communication, thoughts, actions, monologue excerpts) with an
-      importance. <b>Semantic</b>: concepts with a confidence. <b>Facts</b>: entity / attribute / value triples, such as the
+      importance and an access count. <b>Semantic</b>: concepts with a confidence. <b>Facts</b>: entity / attribute / value triples, such as the
       user's age or likes from regex extraction and conversation summaries. <b>Conversations</b> and <b>users</b>: the chat
-      transcript and known names. At start-up the agent deletes episodes older than 30 days with importance below 0.7.</p></div>
+      transcript and known names.</p></div>
   </div>
   <h2>Database schema</h2>
   <p class="small mute">Created by <code>MemoryManager</code> in a temporary directory when this page was built.</p>
   <div class="grid">${tables}</div>
-  <h2>Notes from the code</h2>
-  <div class="callout"><p class="small">The schema has two episodic tables. New episodes are written to <code>episodic_memory</code>,
-    while <code>retrieve_episodic_memories</code>, the 30-day decay, the last-summary lookup and related-memory search read
-    <code>episodic_memories</code>, which nothing writes. Consolidation into semantic memory selects on an
-    <code>access_count</code> column that neither table has. These are listed for a decision rather than changed here.</p></div>
+  <h2>Decay and consolidation</h2>
+  <p class="small">Each read of an episode raises its <code>access_count</code> and resets <code>last_accessed</code>. At start-up
+    the agent deletes episodes not accessed for 30 days with importance below 0.7 (conversation summaries are kept), and
+    conversation facts older than 30 days. Consolidation copies episodes with importance above 0.7 that were read more
+    than three times into semantic memory. Databases from before schema version 1 are migrated once: the old
+    <code>episodic_memories</code> table is merged into <code>episodic_memory</code> and every existing episode counts as
+    accessed at migration time.</p>
   <h2>Your memory database</h2><div id="local"></div>`;
 
   if (isStatic()) { $('#local').innerHTML = needsServer('Browsing memory/memory.db'); return; }

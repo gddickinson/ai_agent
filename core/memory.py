@@ -294,7 +294,7 @@ class MemoryManager:
             # Build query
             sql = """
                 SELECT id, timestamp, episode_type, content, importance
-                FROM episodic_memories
+                FROM episodic_memory
                 WHERE importance >= ?
             """
             params = [min_importance]
@@ -320,6 +320,7 @@ class MemoryManager:
                     'importance': row[4]
                 })
 
+            self._mark_accessed(conn, [m['id'] for m in memories])
             self.logger.debug(f"Retrieved {len(memories)} episodic memories")
             return memories
 
@@ -545,18 +546,7 @@ class MemoryManager:
                 )
             """)
 
-            # Create episodic memories table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS episodic_memories (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp REAL,
-                    episode_type TEXT,
-                    content TEXT,
-                    importance REAL
-                )
-            """)
-
-            # Create episodic_memory table (for compatibility with older code)
+            # Create the episodic memory table (the only one: see _migrate_episodic)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS episodic_memory (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -631,7 +621,8 @@ class MemoryManager:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_perceptions_sensor_type ON perceptions(sensor_type)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_facts_entity ON facts(entity)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_facts_attribute ON facts(attribute)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_episodic_type ON episodic_memories(episode_type)")
+            self._migrate_episodic(cursor)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_episodic_type ON episodic_memory(episode_type)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_semantic_concept ON semantic_memories(concept)")
 
             conn.commit()
@@ -641,6 +632,49 @@ class MemoryManager:
             self.logger.error(f"Error initializing database tables: {e}")
             import traceback
             self.logger.error(traceback.format_exc())
+
+    EPISODIC_SCHEMA_VERSION = 1
+
+    def _migrate_episodic(self, cursor):
+        """
+        Bring an older database to one episodic table with access tracking.
+
+        Older versions wrote episodes to `episodic_memory` but read, summarised and decayed `episodic_memories`,
+        and consolidation needed an `access_count` column that did not exist. Version 1 (PRAGMA user_version):
+        adds access_count, moves any rows from `episodic_memories` into `episodic_memory` and drops it, and
+        marks every existing episode as accessed now, so the 30-day decay (which counts from last access)
+        cannot delete memories that were never readable before the fix.
+        """
+        cols = {r[1] for r in cursor.execute("PRAGMA table_info(episodic_memory)")}
+        if 'access_count' not in cols:
+            cursor.execute("ALTER TABLE episodic_memory ADD COLUMN access_count INTEGER DEFAULT 0")
+        version = cursor.execute("PRAGMA user_version").fetchone()[0]
+        if version >= self.EPISODIC_SCHEMA_VERSION:
+            return
+        now = time.time()
+        legacy = cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='episodic_memories'").fetchone()
+        if legacy:
+            cursor.execute("""
+                INSERT INTO episodic_memory
+                (timestamp, episode_type, content, importance, last_accessed, created_at, access_count)
+                SELECT timestamp, episode_type, content, importance, ?, ?, 0 FROM episodic_memories
+            """, (now, now))
+            self.logger.info(f"Migrated {cursor.rowcount} episodes from episodic_memories")
+            cursor.execute("DROP TABLE episodic_memories")
+        cursor.execute("UPDATE episodic_memory SET last_accessed = ?, access_count = COALESCE(access_count, 0)",
+                       (now,))
+        cursor.execute(f"PRAGMA user_version = {self.EPISODIC_SCHEMA_VERSION}")
+
+    def _mark_accessed(self, conn, ids):
+        """Record a read of these episodic memories (access_count + 1, last_accessed = now)."""
+        ids = [i for i in ids if i is not None]
+        if not ids:
+            return
+        conn.execute(
+            f"UPDATE episodic_memory SET access_count = COALESCE(access_count, 0) + 1, last_accessed = ? "
+            f"WHERE id IN ({','.join('?' * len(ids))})", [time.time(), *ids])
+        conn.commit()
 
     def store_perception(self, sensor_type, sensor_name, data, interpretation=""):
         """
@@ -1171,7 +1205,7 @@ class MemoryManager:
             # Query for last summary
             cursor.execute("""
                 SELECT timestamp
-                FROM episodic_memories
+                FROM episodic_memory
                 WHERE episode_type = 'conversation_summary'
                 ORDER BY timestamp DESC
                 LIMIT 1
@@ -1211,7 +1245,7 @@ class MemoryManager:
             if user_id:
                 cursor.execute("""
                     SELECT id, timestamp, content
-                    FROM episodic_memories
+                    FROM episodic_memory
                     WHERE episode_type = 'conversation_summary'
                     AND content LIKE ?
                     ORDER BY timestamp DESC
@@ -1220,7 +1254,7 @@ class MemoryManager:
             else:
                 cursor.execute("""
                     SELECT id, timestamp, content
-                    FROM episodic_memories
+                    FROM episodic_memory
                     WHERE episode_type = 'conversation_summary'
                     ORDER BY timestamp DESC
                     LIMIT ?
@@ -1278,15 +1312,15 @@ class MemoryManager:
             if context_type == 'visual':
                 tables_to_search = ['perceptions']
             elif context_type == 'conversation':
-                tables_to_search = ['conversations', 'episodic_memories']
+                tables_to_search = ['conversations', 'episodic_memory']
             elif context_type == 'facts':
                 tables_to_search = ['facts']
             else:
                 # Search all relevant tables if no specific context
-                tables_to_search = ['episodic_memories', 'facts', 'perceptions']
+                tables_to_search = ['episodic_memory', 'facts', 'perceptions']
 
-            # Search in episodic_memories if applicable
-            if 'episodic_memories' in tables_to_search:
+            # Search in episodic memory if applicable
+            if 'episodic_memory' in tables_to_search:
                 # Build query conditions for each term
                 like_conditions = []
                 params = []
@@ -1300,7 +1334,7 @@ class MemoryManager:
                     # Execute query with all conditions
                     sql_query = """
                         SELECT id, timestamp, episode_type, content, importance
-                        FROM episodic_memories
+                        FROM episodic_memory
                         WHERE (""" + " OR ".join(like_conditions) + """)
                         ORDER BY importance DESC, timestamp DESC
                         LIMIT ?
@@ -1447,8 +1481,8 @@ class MemoryManager:
 
             # Decay episodic memories
             cursor.execute("""
-                DELETE FROM episodic_memories
-                WHERE timestamp < ?
+                DELETE FROM episodic_memory
+                WHERE COALESCE(last_accessed, timestamp) < ?
                 AND importance < 0.7  -- Only decay low-importance memories
                 AND episode_type != 'conversation_summary'  -- Keep summaries
             """, (threshold_timestamp,))
@@ -1572,7 +1606,7 @@ class MemoryManager:
             stats = {}
 
             # Count items in each table
-            for table in ['perceptions', 'episodic_memories', 'episodic_memory',
+            for table in ['perceptions', 'episodic_memory',
                           'facts', 'semantic_memories', 'semantic_memory',
                           'users', 'conversations']:
                 try:

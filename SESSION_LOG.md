@@ -46,3 +46,8 @@
 - Whether to purge memory/memory.db and memory/output/*.txt from the published git history.
 - Several legacy files exceed the 500-line budget (consciousness.py 1.8k, memory.py 1.6k, autonomy.py, actuators.py,
   sensors.py, perception.py, cognition.py, llm/manager.py); not split here.
+
+## 2026-11-12: git history rewrite (approved by George)
+- Purged from all history with git-filter-repo and force-pushed: memory/memory.db, memory/output/display.txt, memory/output/speech.txt, memory/.DS_Store and the two 2025-03-31 logs/agent_*.log chat logs.
+  The current tree is unchanged (identical HEAD tree before/after); commit hashes changed, so old clones must be
+  re-cloned or reset to origin. A pre-rewrite mirror backup was kept outside the repo.

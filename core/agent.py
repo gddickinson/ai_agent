@@ -157,6 +157,43 @@ class EmbodiedAgent:
 
 
 
+    def _perception_cycle(self) -> int:
+        """Read every sensor once, note camera/microphone input in working memory, run perception.
+
+        Returns:
+            Number of sensors that produced data this cycle
+        """
+        sensor_data = self.sensors.get_readings()  # {sensor_name: reading}
+        for sensor_name, data in sensor_data.items():
+            sensor_type = data.get('type', 'unknown')
+            self.logger.debug(f"Sensor {sensor_name} ({sensor_type}): {str(data)[:100]}...")
+
+            # Store basic information in working memory for immediate access
+            if sensor_type == 'camera' and data.get('description'):
+                self.memory.add_to_working_memory(
+                    item={
+                        'type': 'perception',
+                        'sensor': sensor_name,
+                        'content': f"Visual: {data['description']}",
+                        'timestamp': data.get('timestamp', time.time())
+                    },
+                    importance=0.6
+                )
+            elif sensor_type == 'microphone' and 'text' in data:
+                self.memory.add_to_working_memory(
+                    item={
+                        'type': 'perception',
+                        'sensor': sensor_name,
+                        'content': f"Audio: {data['text']}",
+                        'timestamp': data.get('timestamp', time.time())
+                    },
+                    importance=0.7
+                )
+
+        if sensor_data:
+            self.perception.process(sensor_data)
+        return len(sensor_data)
+
     def _start_perception_processing(self):
         """Start the perception processing thread."""
         def perception_loop():
@@ -164,42 +201,9 @@ class EmbodiedAgent:
             perception_count = 0
             while self.is_running:
                 try:
-                    # Get sensor data
-                    sensor_data = self.sensors.get_all_data()
-
-                    # Log the sensor data for debugging
-                    if sensor_data:
+                    if self._perception_cycle():
                         perception_count += 1
-                        self.logger.debug(f"Processing sensor data from {len(sensor_data)} sensors (#{perception_count})")
-                        for sensor_name, data in sensor_data.items():
-                            sensor_type = data.get('type', 'unknown')
-                            self.logger.debug(f"Sensor {sensor_name} ({sensor_type}): {str(data)[:100]}...")
-
-                            # Store basic information in working memory for immediate access
-                            if sensor_type == 'camera' and 'description' in data:
-                                self.memory.add_to_working_memory(
-                                    item={
-                                        'type': 'perception',
-                                        'sensor': sensor_name,
-                                        'content': f"Visual: {data['description']}",
-                                        'timestamp': data.get('timestamp', time.time())
-                                    },
-                                    importance=0.6
-                                )
-                            elif sensor_type == 'microphone' and 'text' in data:
-                                self.memory.add_to_working_memory(
-                                    item={
-                                        'type': 'perception',
-                                        'sensor': sensor_name,
-                                        'content': f"Audio: {data['text']}",
-                                        'timestamp': data.get('timestamp', time.time())
-                                    },
-                                    importance=0.7
-                                )
-
-                    # Process perception
-                    if sensor_data:
-                        self.perception.process(sensor_data)
+                        self.logger.debug(f"Processed sensor data (#{perception_count})")
 
                     # Sleep to avoid excessive CPU usage
                     time.sleep(self.config['processing']['perception_interval'])

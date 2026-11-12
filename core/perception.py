@@ -101,6 +101,21 @@ class PerceptionModule:
                 self.logger.error(f"Error processing sensor {sensor_name}: {e}")
                 self.logger.error(traceback.format_exc())
 
+    def _process_audio_data(self, sensor_name, data, perception_id=None):
+        """Send a microphone reading (pre-transcribed 'text') to the audio interpreter."""
+        text = data.get('text', '')
+        if not text:
+            return
+        self._process_audio({
+            'timestamp': data.get('timestamp', time.time()),
+            'format': 'text',
+            'content': text
+        })
+
+    def _process_general_data(self, sensor_name, sensor_type, data, perception_id=None):
+        """Send a generic sensor reading (temperature, battery, lidar, ...) to the general interpreter."""
+        self._process_general_sensor(sensor_type, data)
+
     def _process_vision(self, image_data: Dict[str, Any]):
         """
         Process vision data using vision LLM.

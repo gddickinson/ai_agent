@@ -699,6 +699,21 @@ class SensorManager:
 
         return result
 
+    def get_readings(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Get the latest reading from every sensor that has one, keyed by sensor name
+        (the shape PerceptionModule.process expects).
+
+        Returns:
+            Dictionary of sensor data by sensor name
+        """
+        result = {}
+        for name, sensor in self.sensors.items():
+            data = sensor.get_data()
+            if data:
+                result[name] = data
+        return result
+
     def get_sensors_by_type(self, sensor_type: str) -> List[str]:
         """
         Get a list of sensor names of a specific type.

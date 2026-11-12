@@ -1,10 +1,9 @@
 /logs
 *.log
+# The agent's own memory (SQLite) and display/speaker output: personal data, created at run time, never published
 /memory
 memory/memory.db
-memory/output/display.txt
-memory/output/speech.txt
-memory/output/display.txt
+memory/output/*.txt
 /tests/__pycache__
 /llm/__pycache__
 /hardware/__pycache__

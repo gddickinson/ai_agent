@@ -80,6 +80,7 @@ class ConsciousnessModule:
         # Initiative flags
         self.can_initiate_conversation = False  # Will be enabled after startup delay
         self.initiative_startup_delay = 300.0  # 5 minutes after startup
+        self.start_time = time.time()
 
         self.logger.info("Consciousness module initialized")
 
@@ -104,7 +105,7 @@ class ConsciousnessModule:
 
             # Enable conversation initiation after startup delay
             if not self.can_initiate_conversation:
-                if time.time() - self.last_initiation_time > self.initiative_startup_delay:
+                if time.time() - self.start_time > self.initiative_startup_delay:
                     self.can_initiate_conversation = True
                     self.logger.info("Conversation initiation capability enabled")
 

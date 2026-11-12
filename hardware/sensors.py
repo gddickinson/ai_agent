@@ -442,14 +442,8 @@ class MicrophoneSensor(SensorInterface):
         """Simulate microphone data for testing."""
         self.logger.debug(f"Starting microphone simulation for {self.name}")
 
-        # Get simulated data if configured
-        simulated_data = self.config.get('simulate_data', [
-            "Hello, can you hear me?",
-            "What's the current time?",
-            "Tell me about your capabilities.",
-            "What are you thinking about?",
-            "What do you see right now?"
-        ])
+        # Phrases to rotate through (from config, else the defaults set in __init__)
+        simulated_data = self.simulate_data
 
         audio_count = 0
 

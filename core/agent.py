@@ -116,6 +116,9 @@ class EmbodiedAgent:
         # Start memory system
         self.memory.start()
 
+        # The loops below run while is_running is True, so set it before starting them
+        self.is_running = True
+
         # Start the cognitive processing pipeline
         self._start_perception_processing()
         self._start_cognition_processing()
@@ -126,7 +129,6 @@ class EmbodiedAgent:
             self.autonomy.start()
             self.logger.info("Autonomy module started")
 
-        self.is_running = True
         self.logger.info("Agent started successfully")
 
     def stop(self):

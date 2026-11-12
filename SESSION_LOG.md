@@ -28,18 +28,21 @@
    consciousness loops exited immediately.
 - Also: OpenCV is optional for the sensor layer (camera falls back to simulation without it).
 
-**Needs George's decision (not changed)**
-- Two episodic tables: writes go to `episodic_memory`, but retrieval, 30-day decay, last-summary lookup and related
-  memories read `episodic_memories` (always empty). Pointing reads/decay at `episodic_memory` would start deleting
-  old low-importance episodes from real memory databases.
-- `_consolidate_memories` selects on an `access_count` column that no table has (always errors).
-- `LLMModel._process_ollama` returns `{"text": "Error processing request: ..."}` on a connection error, so callers
-  treat it as a reply: the agent speaks/stores the error text instead of its fallback response.
+**Follow-up fixes (same day)**
+9. memory/memory.db and memory/output/*.txt (personal chat logs) untracked and ignored; they stay on disk and
+   **remain in earlier commits of the git history** (no history rewrite).
+10. Episodic memory: one table (`episodic_memory`) for writes, reads, summaries, decay and consolidation. Schema
+    version 1 (PRAGMA user_version) migrates once: adds `access_count`, merges and drops `episodic_memories`, marks
+    existing episodes accessed now. Decay counts 30 days from last access, so episodes that were unreadable before
+    the fix are not deleted. Checked on a copy of a real memory.db (80 episodes kept). Consolidation works.
+11. LLM manager: a result with `error` (Ollama unreachable, timeout) is reported as a failure, so the agent uses its
+    fallback response instead of speaking the error text.
+
+**Still for George's decision (not changed)**
 - Consciousness reads emotions from an `internal_state` working-memory item that nothing writes, so it always uses
   its built-in default state (curiosity 0.8) for prompts and initiation odds.
 - Actions from the action LLM usually name a direction as target (`move` -> `forward`), which matches no motor
   (`execute_action` needs `all` or a motor name).
-- `memory/memory.db` and `memory/output/*.txt` are committed although `.gitignore` lists `/memory`; they contain
-  personal chat logs. The static site exports none of it.
+- Whether to purge memory/memory.db and memory/output/*.txt from the published git history.
 - Several legacy files exceed the 500-line budget (consciousness.py 1.8k, memory.py 1.6k, autonomy.py, actuators.py,
   sensors.py, perception.py, cognition.py, llm/manager.py); not split here.

@@ -11,7 +11,7 @@
 - `perception.py` -- `PerceptionModule`; processes raw sensor data into meaningful perceptions using LLMs
 - `cognition.py` -- `CognitionModule`; reasoning, emotion, and planning using LLMs
 - `consciousness.py` -- `ConsciousnessModule`; high-level awareness, communication coordinator, message handling
-- `memory.py` -- `MemoryManager`; perception memory, working memory, episodic/semantic memory (SQLite-backed)
+- `memory.py` -- `MemoryManager`; perception memory, working memory, episodic/semantic memory (SQLite-backed; `_migrate_episodic` schema v1, access counts)
 - `autonomy.py` -- `AutonomyModule`, `DEFAULT_TOPICS`; autonomous thought generation, metacognition, topic tracking (`_thought_interval`, `_topic_weights`)
 
 ## LLM (`llm/`)
@@ -47,7 +47,7 @@
 - `test_config.py` -- Unit tests for config loading and validation
 - `test_memory.py` -- Unit tests for MemoryManager
 - `conftest.py` -- keeps the manual hardware/Ollama scripts out of pytest collection
-- `test_motor_model.py`, `test_simulation_fallback.py`, `test_sensors_without_opencv.py`, `test_perception_pipeline.py`, `test_agent_loops.py`, `test_autonomy_logic.py`, `test_consciousness_logic.py` -- unit tests (fake LLM, no network)
+- `test_motor_model.py`, `test_simulation_fallback.py`, `test_sensors_without_opencv.py`, `test_perception_pipeline.py`, `test_agent_loops.py`, `test_episodic_memory.py`, `test_llm_errors.py`, `test_autonomy_logic.py`, `test_consciousness_logic.py` -- unit tests (fake LLM, no network)
 - `test_web.py`, `test_engine_fixture.py` -- web API, static build, JS engine node tests, fixture is current
 - `test_ollama.py` -- Ad-hoc Ollama API connectivity test
 - `test_autonomy.py` -- Ad-hoc autonomy module test

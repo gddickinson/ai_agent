@@ -12,6 +12,8 @@ from abc import ABC, abstractmethod
 import json
 import os
 
+from hardware import motor_model
+
 class ActuatorInterface(ABC):
     """Base class for actuator interfaces."""
     
@@ -292,6 +294,7 @@ class MotorActuator(ActuatorInterface):
         # Simulated motor settings
         self.simulate = config.get('simulate', True)
         self.motor_type = config.get('motor_type', 'generic')  # 'wheel', 'arm', etc.
+        self.state = motor_model.new_state()  # speed / position / target, updated by the simulation thread
         
         self.logger.info(f"Initialized {self.motor_type} motor actuator: {self.name}")
     
@@ -355,13 +358,8 @@ class MotorActuator(ActuatorInterface):
             return False
     
     def _simulate_motor(self):
-        """Simulate motor actions for testing."""
+        """Simulate motor actions for testing (state update in hardware/motor_model.py)."""
         self.logger.debug(f"Starting {self.motor_type} motor simulation for {self.name}")
-        
-        # Current motor state
-        current_speed = 0.0
-        current_position = 0.0
-        target_position = 0.0
         
         try:
             while self.running:
@@ -369,62 +367,26 @@ class MotorActuator(ActuatorInterface):
                     # Get next command (non-blocking)
                     try:
                         command = self.command_queue.get_nowait()
-                        
-                        # Process command
+                        self.state = motor_model.apply_command(self.state, command)
                         cmd_type = command.get('command', 'stop')
-                        
                         if cmd_type == 'stop':
-                            current_speed = 0.0
                             self.logger.info(f"Motor {self.name} stopped")
-                        
                         elif cmd_type == 'move':
-                            speed = command.get('speed', 0.5)  # 0.0-1.0
-                            direction = command.get('direction', 'forward')
-                            
-                            # Set speed and direction
-                            if direction == 'forward':
-                                current_speed = speed
-                            elif direction == 'backward':
-                                current_speed = -speed
-                            else:
-                                current_speed = 0.0
-                                
-                            self.logger.info(f"Motor {self.name} moving {direction} at speed {speed}")
-                        
+                            self.logger.info(f"Motor {self.name} moving {command.get('direction', 'forward')} "
+                                             f"at speed {command.get('speed', 0.5)}")
                         elif cmd_type == 'position':
-                            target_position = command.get('position', current_position)
-                            speed = command.get('speed', 0.5)  # 0.0-1.0
-                            
-                            # Set speed based on direction needed
-                            if target_position > current_position:
-                                current_speed = speed
-                            elif target_position < current_position:
-                                current_speed = -speed
-                            else:
-                                current_speed = 0.0
-                                
-                            self.logger.info(f"Motor {self.name} moving to position {target_position}")
-                        
-                        # Mark command as done
+                            self.logger.info(f"Motor {self.name} moving to position {self.state['target']}")
                         self.command_queue.task_done()
-                        
                     except queue.Empty:
-                        # No command to process
                         pass
                     
                     # Update position based on speed
-                    if current_speed != 0.0:
-                        current_position += current_speed * 0.1  # Simple simulation
-                        
-                        # Check if reached target for position commands
-                        if (current_speed > 0 and current_position >= target_position) or \
-                           (current_speed < 0 and current_position <= target_position):
-                            current_position = target_position
-                            current_speed = 0.0
-                            self.logger.info(f"Motor {self.name} reached position {current_position}")
+                    had_target = self.state['target'] is not None
+                    self.state = motor_model.step(self.state)
+                    if had_target and self.state['target'] is None:
+                        self.logger.info(f"Motor {self.name} reached position {self.state['position']}")
                     
-                    # Sleep a bit
-                    time.sleep(0.1)
+                    time.sleep(motor_model.TICK)
                     
                 except Exception as e:
                     self.logger.error(f"Error in motor simulation: {e}")
